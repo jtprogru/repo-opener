@@ -6,6 +6,20 @@
 
 Simple utility for fast open current repository in browser.
 
+## Usage
+
+To use `repo-opener`, simply run the following command in your terminal:
+
+```sh
+repo-opener
+```
+
+This will open the current Git repository's remote URL in your default web browser.
+
+### Options
+
+- `-version`: Print version and build information and exit.
+
 ## License
 
 [LICENSE](LICENSE)
