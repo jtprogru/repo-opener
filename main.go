@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -16,7 +17,25 @@ const (
 	ErrEmptyRepositoryPath  = "empty repository path"
 )
 
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+	BuiltBy = "unknown"
+
+	versionFlag bool
+)
+
 func main() {
+	flag.BoolVar(&versionFlag, "version", false, "Print version information and exit")
+
+	flag.Parse()
+
+	if versionFlag {
+		fmt.Println("Version:", Version)
+		fmt.Printf("Build info: commit %s, built at %s\n", Commit, Date)
+		return
+	}
 	// Проверяем, что находимся в Git-репозитории.
 	if err := checkGitRepo(); err != nil {
 		exitWithError(err)
