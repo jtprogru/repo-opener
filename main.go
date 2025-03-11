@@ -18,12 +18,12 @@ const (
 )
 
 var (
-	Version = "dev"
-	Commit  = "none"
-	Date    = "unknown"
-	BuiltBy = "unknown"
+	Version = "dev"     //nolint:gochecknoglobals // This is normal
+	Commit  = "none"    //nolint:gochecknoglobals // This is normal
+	Date    = "unknown" //nolint:gochecknoglobals // This is normal
+	BuiltBy = "unknown" //nolint:gochecknoglobals // This is normal
 
-	versionFlag bool
+	versionFlag bool //nolint:gochecknoglobals // This is normal
 )
 
 func main() {
