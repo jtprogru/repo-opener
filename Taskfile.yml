@@ -27,8 +27,6 @@ tasks:
 
   tidy:
     desc: Install all requirements
-    deps:
-      - precs
     preconditions:
       - test -f go.mod
     cmds:
