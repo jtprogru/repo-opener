@@ -1,0 +1,20 @@
+name: "\U0001F680 Feature Request"
+description: File a feature Request
+title: "[\U0001F680]: "
+labels: ["enhancement"]
+assignees:
+  - jtprogru
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this feature request!
+  - type: textarea
+    id: feature-request
+    attributes:
+      label: What are you functionality want?
+      description: Also tell us, what do you lack of functionality?
+      placeholder: Tell us what you see!
+      value: "Make a magic!"
+    validations:
+      required: true

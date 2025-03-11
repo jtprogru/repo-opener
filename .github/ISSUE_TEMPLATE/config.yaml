@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Telegram Chat
+    url: https://t.me/jtprogru_chat
+    about: Please ask and answer questions here.
+  - name: Bug Reports and Feature Request
+    url: https://github.com/jtprogru/repo-opener/issues
+    about: Please report about any bugs and request feature here.
