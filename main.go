@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
+	git "github.com/go-git/go-git/v5"
 	"github.com/pkg/browser"
 )
 
