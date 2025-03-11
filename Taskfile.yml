@@ -84,9 +84,20 @@ tasks:
       - "watchexec -c clear -o do-nothing -d 100ms --exts go 'pkg=\".${WATCHEXEC_COMMON_PATH/$PWD/}/...\"; echo \"running tests for $pkg\"; go test \"$pkg\"'"
 
   lint:
+    desc: Run all lint
+    cmds:
+      - task lint:golangci
+      - task lint:bearer
+
+  lint:golangci:
     desc: Run golangci-lint
     cmds:
       - "golangci-lint -v run --out-format=colored-line-number"
+
+  lint:bearer:
+    desc: Run Bearer Security
+    cmds:
+      - "bearer scan ."
 
   install:
     desc: Build and install localy
