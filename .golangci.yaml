@@ -80,7 +80,7 @@ linters:
     - errorlint
 
     # Checks for pointers to enclosing loop variables.
-    - exportloopref
+    # - exportloopref
 
     # Imports order.
     - gci
