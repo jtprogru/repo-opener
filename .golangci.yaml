@@ -79,9 +79,6 @@ linters:
     # Suggests to use `%w` for error-wrapping.
     - errorlint
 
-    # Checks for pointers to enclosing loop variables.
-    # - exportloopref
-
     # Imports order.
     - gci
 
@@ -178,7 +175,6 @@ linters:
     - tagliatelle
 
     # Test-related checks. All of them are good.
-    - tenv
     - testableexamples
     - testifylint
     - thelper
@@ -226,9 +222,6 @@ linters:
 
     # I'm fine to check the error from json.Marshal ¯\_(ツ)_/¯
     - errchkjson
-
-    # All SQL queries MUST BE covered with tests.
-    - execinquery
 
     # Forces to handle more cases. Cool but noisy.
     - exhaustive
@@ -753,9 +746,6 @@ output:
   # Must have. Easier to understand the output.
   print-linter-name: true
 
-  # No, no skips, everything should be reported.
-  uniq-by-line: false
-
   # To be honest no idea when this can be needed, maybe a multi-module setup?
   path-prefix: ""
 
@@ -782,3 +772,6 @@ issues:
   # Even with a recent GPT-4 release I still believe that
   # I know better how to do my job and fix the suggestions.
   fix: false
+
+  # No, no skips, everything should be reported.
+  uniq-by-line: false
