@@ -33,7 +33,7 @@ func main() {
 
 	if versionFlag {
 		fmt.Println("Version:", Version)
-		fmt.Printf("Build info: commit %s, built at %s\n", Commit, Date)
+		fmt.Printf("Build info: commit %s, built at %s, by %s\n", Commit, Date, BuiltBy)
 		return
 	}
 	// Проверяем, что находимся в Git-репозитории.
