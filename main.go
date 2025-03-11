@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -10,27 +11,32 @@ import (
 	"github.com/pkg/browser"
 )
 
+const (
+	ErrOriginRemoteNotFound = "origin remote not found"
+	ErrEmptyRepositoryPath  = "empty repository path"
+)
+
 func main() {
-	// Проверяем, что находимся в Git-репозитории
+	// Проверяем, что находимся в Git-репозитории.
 	if err := checkGitRepo(); err != nil {
 		exitWithError(err)
 	}
 
-	// Получаем URL origin remote
+	// Получаем URL origin remote.
 	remoteURL, err := getRemoteURL()
 	if err != nil {
 		exitWithError(err)
 	}
 
-	// Парсим URL и конвертируем в веб-формат
+	// Парсим URL и конвертируем в веб-формат.
 	webURL, err := parseRemoteURL(remoteURL)
 	if err != nil {
 		exitWithError(err)
 	}
 
-	// Открываем URL в браузере
+	// Открываем URL в браузере.
 	if err := browser.OpenURL(webURL); err != nil {
-		exitWithError(fmt.Errorf("failed to open browser: %v", err))
+		exitWithError(fmt.Errorf("failed to open browser: %w", err))
 	}
 
 	fmt.Printf("Opened repository URL: %s\n", webURL)
@@ -39,7 +45,7 @@ func main() {
 func checkGitRepo() error {
 	_, err := git.PlainOpen(".")
 	if err != nil {
-		return fmt.Errorf("not a git repository: %v", err)
+		return fmt.Errorf("not a git repository: %w", err)
 	}
 	return nil
 }
@@ -47,12 +53,12 @@ func checkGitRepo() error {
 func getRemoteURL() (string, error) {
 	repo, err := git.PlainOpen(".")
 	if err != nil {
-		return "", fmt.Errorf("failed to open git repository: %v", err)
+		return "", fmt.Errorf("failed to open git repository: %w", err)
 	}
 
 	remotes, err := repo.Remotes()
 	if err != nil {
-		return "", fmt.Errorf("failed to get remotes: %v", err)
+		return "", fmt.Errorf("failed to get remotes: %w", err)
 	}
 
 	for _, remote := range remotes {
@@ -63,16 +69,16 @@ func getRemoteURL() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("origin remote not found")
+	return "", errors.New(ErrOriginRemoteNotFound)
 }
 
 func parseRemoteURL(remoteURL string) (string, error) {
-	// Пытаемся парсить как стандартный URL
+	// Пытаемся парсить как стандартный URL.
 	if u, err := url.Parse(remoteURL); err == nil && u.Scheme != "" {
 		return parseStructuredURL(u)
 	}
 
-	// Обрабатываем SSH-формат (git@host:path)
+	// Обрабатываем SSH-формат (git@host:path).
 	if strings.HasPrefix(remoteURL, "git@") {
 		return parseSSHURL(remoteURL)
 	}
@@ -98,7 +104,7 @@ func parseStructuredURL(u *url.URL) (string, error) {
 	}
 
 	if path == "" {
-		return "", fmt.Errorf("empty repository path") //nolint:goerr113
+		return "", errors.New("empty repository path")
 	}
 
 	return buildWebURL(host, path)
@@ -107,27 +113,30 @@ func parseStructuredURL(u *url.URL) (string, error) {
 func parseSSHURL(remoteURL string) (string, error) {
 	parts := strings.SplitN(remoteURL, ":", 2)
 	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid SSH URL format")
+		return "", errors.New("invalid SSH URL format")
 	}
 
 	host := strings.TrimPrefix(parts[0], "git@")
 	path := parts[1]
 
 	if path == "" {
-		return "", fmt.Errorf("empty repository path")
+		return "", errors.New(ErrEmptyRepositoryPath)
 	}
 
 	return buildWebURL(host, path)
 }
 
-func buildWebURL(host, path string) (string, error) {
-	// Удаляем .git в конце пути и ведущие/конечные слэши
+func buildWebURL(hostOrigin, path string) (string, error) {
+	// Создаем копию hostOrigin, чтобы не изменять оригинальную строку.
+	host := hostOrigin
+
+	// Удаляем .git в конце пути и ведущие/конечные слэши.
 	cleanPath := strings.Trim(strings.TrimSuffix(path, ".git"), "/")
 	if cleanPath == "" {
-		return "", fmt.Errorf("empty repository path")
+		return "", errors.New(ErrEmptyRepositoryPath)
 	}
 
-	// Определяем тип хоста
+	// Определяем тип хоста.
 	scheme := "https://"
 	if strings.Contains(host, "github") {
 		host = "github.com"
@@ -138,5 +147,5 @@ func buildWebURL(host, path string) (string, error) {
 
 func exitWithError(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(1)
+	os.Exit(1) //nolint:revive // Exit with error
 }
