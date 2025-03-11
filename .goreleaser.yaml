@@ -46,7 +46,7 @@ archives:
   - formats: ["tar.gz", "zip"] # Plural form, multiple formats. Since: v2.6
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}{{- if .Arm64 }}v{{ .Arm64 }}{{ end }}{{ if .Prerelease }}_{{ .Prerelease }}{{ end }}
-    allow_different_binary_count: true
+    allow_different_binary_count: false
     # use zip for windows archives
     format_overrides:
     - goos: windows
