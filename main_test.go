@@ -1,4 +1,3 @@
-// main_test.go
 package main
 
 import (
@@ -71,69 +70,69 @@ func TestGetRemoteURL(t *testing.T) {
 func TestParseRemoteURL(t *testing.T) {
 	t.Parallel()
 
-	// Test case: valid HTTP URL
+	// Test case: valid HTTP URL.
 	httpURL := "https://github.com/jtprogru/repo-opener.git"
 	webURL, err := parseRemoteURL(httpURL)
-	assert.NoError(t, err, "Expected no error for valid HTTP URL")
+	require.NoError(t, err, "Expected no error for valid HTTP URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: valid SSH URL
+	// Test case: valid SSH URL.
 	sshURL := "git@github.com:jtprogru/repo-opener.git"
 	webURL, err = parseRemoteURL(sshURL)
-	assert.NoError(t, err, "Expected no error for valid SSH URL")
+	require.NoError(t, err, "Expected no error for valid SSH URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: invalid SSH URL
+	// Test case: invalid SSH URL.
 	invalidSSHURL := "git@github.com:user"
 	_, err = parseRemoteURL(invalidSSHURL)
-	assert.Error(t, err, "Expected error for invalid SSH URL")
+	require.Error(t, err, "Expected error for invalid SSH URL")
 
-	// Test case: unsupported URL format
+	// Test case: unsupported URL format.
 	invalidURL := "ftp://example.com/repo.git"
 	_, err = parseRemoteURL(invalidURL)
-	assert.Error(t, err, "Expected error for unsupported URL format")
+	require.Error(t, err, "Expected error for unsupported URL format")
 }
 
 func TestParseStructuredURL(t *testing.T) {
 	t.Parallel()
 
-	// Test case: valid HTTP URL
-	u, _ := url.Parse("https://github.com/jtprogru/repo-opener.git")
+	// Test case: valid HTTP URL.
+	u, _ := url.Parse("https://github.com/jtprogru/repo-opener.git") //nolint:errcheck // Ignore error from url.Parse
 	webURL, err := parseStructuredURL(u)
-	assert.NoError(t, err, "Expected no error for valid structured URL")
+	require.NoError(t, err, "Expected no error for valid structured URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: missing path
-	u, _ = url.Parse("https://github.com")
+	// Test case: missing path.
+	u, _ = url.Parse("https://github.com") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	assert.Error(t, err, "Expected error for empty repository path")
+	require.Error(t, err, "Expected error for empty repository path")
 
-	// Test case: ssh scheme with invalid user
-	u, _ = url.Parse("ssh://user@github.com/jtprogru/repo-opener.git")
+	// Test case: ssh scheme with invalid user.
+	u, _ = url.Parse("ssh://user@github.com/jtprogru/repo-opener.git") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	assert.Error(t, err, "Expected error for unsupported SSH username")
+	require.Error(t, err, "Expected error for unsupported SSH username")
 
-	// Test case: unsupported scheme
-	u, _ = url.Parse("ftp://example.com/repo.git")
+	// Test case: unsupported scheme.
+	u, _ = url.Parse("ftp://example.com/repo.git") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	assert.Error(t, err, "Expected error for unsupported scheme")
+	require.Error(t, err, "Expected error for unsupported scheme")
 }
 
 func TestParseSSHURL(t *testing.T) {
 	t.Parallel()
 
-	// Test case: valid SSH URL
+	// Test case: valid SSH URL.
 	sshURL := "git@github.com:jtprogru/repo-opener.git"
 	webURL, err := parseSSHURL(sshURL)
-	assert.NoError(t, err, "Expected no error for valid SSH URL")
+	require.NoError(t, err, "Expected no error for valid SSH URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: invalid SSH URL
+	// Test case: invalid SSH URL.
 	invalidSSHURL := "git@github.com:user"
 	_, err = parseSSHURL(invalidSSHURL)
-	assert.Error(t, err, "Expected error for invalid SSH URL")
+	require.Error(t, err, "Expected error for invalid SSH URL")
 
-	// Test case: empty path
+	// Test case: empty path.
 	emptyPathURL := "git@github.com:/"
 	_, err = parseSSHURL(emptyPathURL)
 	assert.ErrorContains(t, err, ErrEmptyRepositoryPath)
@@ -170,7 +169,6 @@ func TestBuildWebURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
