@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: stable
+  GO_VERSION: 1.25.0
   GOLANGCI_LINT_VERSION: v1.64
   TASKFILE_VERSION: 3.x
 
