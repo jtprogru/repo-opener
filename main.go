@@ -136,10 +136,14 @@ func parseSSHURL(remoteURL string) (string, error) {
 	}
 
 	host := strings.TrimPrefix(parts[0], "git@")
-	path := parts[1]
+	path := strings.Trim(parts[1], "/")
 
 	if path == "" {
 		return "", errors.New(ErrEmptyRepositoryPath)
+	}
+
+	if len(strings.Split(path, "/")) < 2 {
+		return "", errors.New("invalid SSH URL format")
 	}
 
 	return buildWebURL(host, path)
