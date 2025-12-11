@@ -2,6 +2,9 @@
 ---
 version: "3"
 
+environment:
+  GOPROXY: https://proxy.golang.org,direct
+
 vars:
   HOME:
     sh: echo $HOME
@@ -92,7 +95,7 @@ tasks:
   lint:golangci:
     desc: Run golangci-lint
     cmds:
-      - "golangci-lint -v run --out-format=colored-line-number"
+      - "golangci-lint -v run --output.text.colors"
 
   lint:bearer:
     desc: Run Bearer Security
