@@ -38,7 +38,7 @@ tasks:
     preconditions:
       - test -f go.mod
     cmds:
-      - "go mod tidy"
+      - "GOPROXY=https://proxy.golang.org,direct go mod tidy"
 
   build:bin:
     desc: Build bin file from go
