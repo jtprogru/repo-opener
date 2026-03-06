@@ -11,24 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCheckGitRepo(t *testing.T) {
-	t.Run("valid repo", func(t *testing.T) {
-		repoPath := initTempRepo(t)
-		withChdir(t, repoPath)
-
-		err := checkGitRepo()
-		require.NoError(t, err)
-	})
-
-	t.Run("not a repo", func(t *testing.T) {
-		tmp := t.TempDir()
-		withChdir(t, tmp)
-
-		err := checkGitRepo()
-		require.Error(t, err)
-	})
-}
-
 func TestGetRemoteURL(t *testing.T) {
 	t.Run("returns origin remote", func(t *testing.T) {
 		repoPath := initTempRepo(t)
@@ -43,12 +25,12 @@ func TestGetRemoteURL(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		remoteURL, err := getRemoteURL()
+		remoteURL, err := getRemoteURL(repo, "origin")
 		require.NoError(t, err)
 		assert.Equal(t, "https://example.com/org/repo.git", remoteURL)
 	})
 
-	t.Run("origin missing", func(t *testing.T) {
+	t.Run("returns upstream remote", func(t *testing.T) {
 		repoPath := initTempRepo(t)
 		withChdir(t, repoPath)
 
@@ -57,30 +39,72 @@ func TestGetRemoteURL(t *testing.T) {
 
 		_, err = repo.CreateRemote(&config.RemoteConfig{
 			Name: "upstream",
+			URLs: []string{"https://github.com/org/repo.git"},
+		})
+		require.NoError(t, err)
+
+		remoteURL, err := getRemoteURL(repo, "upstream")
+		require.NoError(t, err)
+		assert.Equal(t, "https://github.com/org/repo.git", remoteURL)
+	})
+
+	t.Run("remote not found", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		withChdir(t, repoPath)
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+
+		_, err = repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
 			URLs: []string{"https://example.com/org/repo.git"},
 		})
 		require.NoError(t, err)
 
-		_, err = getRemoteURL()
+		_, err = getRemoteURL(repo, "nonexistent")
 		require.Error(t, err)
-		assert.ErrorContains(t, err, ErrOriginRemoteNotFound)
+		assert.ErrorContains(t, err, `remote "nonexistent" not found`)
 	})
 }
 
 func TestParseRemoteURL(t *testing.T) {
 	t.Parallel()
 
-	// Test case: valid HTTP URL.
+	// Test case: valid HTTP URL (GitHub).
 	httpURL := "https://github.com/jtprogru/repo-opener.git"
 	webURL, err := parseRemoteURL(httpURL)
 	require.NoError(t, err, "Expected no error for valid HTTP URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: valid SSH URL.
+	// Test case: valid HTTP URL (GitLab).
+	httpURL = "https://gitlab.com/org/repo.git"
+	webURL, err = parseRemoteURL(httpURL)
+	require.NoError(t, err, "Expected no error for valid HTTP URL")
+	assert.Equal(t, "https://gitlab.com/org/repo", webURL)
+
+	// Test case: valid HTTP URL (Bitbucket).
+	httpURL = "https://bitbucket.org/org/repo.git"
+	webURL, err = parseRemoteURL(httpURL)
+	require.NoError(t, err, "Expected no error for valid HTTP URL")
+	assert.Equal(t, "https://bitbucket.org/org/repo", webURL)
+
+	// Test case: valid SSH URL (GitHub).
 	sshURL := "git@github.com:jtprogru/repo-opener.git"
 	webURL, err = parseRemoteURL(sshURL)
 	require.NoError(t, err, "Expected no error for valid SSH URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
+
+	// Test case: valid SSH URL (GitLab).
+	sshURL = "git@gitlab.com:org/repo.git"
+	webURL, err = parseRemoteURL(sshURL)
+	require.NoError(t, err, "Expected no error for valid SSH URL")
+	assert.Equal(t, "https://gitlab.com/org/repo", webURL)
+
+	// Test case: valid SSH URL (Bitbucket).
+	sshURL = "git@bitbucket.org:org/repo.git"
+	webURL, err = parseRemoteURL(sshURL)
+	require.NoError(t, err, "Expected no error for valid SSH URL")
+	assert.Equal(t, "https://bitbucket.org/org/repo", webURL)
 
 	// Test case: invalid SSH URL.
 	invalidSSHURL := "git@github.com:user"
@@ -148,22 +172,79 @@ func TestBuildWebURL(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
+		// Публичные платформы.
 		{
-			name: "github host normalized",
-			host: "github.example.com",
-			path: "jtprogru/repo-opener.git",
-			want: "https://github.com/jtprogru/repo-opener",
+			name: "github.com normalized",
+			host: "github.com",
+			path: "org/repo.git",
+			want: "https://github.com/org/repo",
 		},
 		{
-			name: "custom host preserved",
+			name: "www.github.com normalized",
+			host: "www.github.com",
+			path: "org/repo.git",
+			want: "https://github.com/org/repo",
+		},
+		{
+			name: "gitlab.com normalized",
 			host: "gitlab.com",
-			path: "/org/repo/",
+			path: "org/repo.git",
 			want: "https://gitlab.com/org/repo",
 		},
+		{
+			name: "www.gitlab.com normalized",
+			host: "www.gitlab.com",
+			path: "org/repo.git",
+			want: "https://gitlab.com/org/repo",
+		},
+		{
+			name: "bitbucket.org normalized",
+			host: "bitbucket.org",
+			path: "org/repo.git",
+			want: "https://bitbucket.org/org/repo",
+		},
+		// Приватные инсталляции (не изменяются).
+		{
+			name: "private gitlab preserved",
+			host: "gitlab.internal.company",
+			path: "org/repo.git",
+			want: "https://gitlab.internal.company/org/repo",
+		},
+		{
+			name: "private git host preserved",
+			host: "git.jtprog.ru",
+			path: "org/repo.git",
+			want: "https://git.jtprog.ru/org/repo",
+		},
+		{
+			name: "private github enterprise preserved",
+			host: "github.internal.company",
+			path: "org/repo.git",
+			want: "https://github.internal.company/org/repo",
+		},
+		{
+			name: "gitea instance preserved",
+			host: "gitea.example.com",
+			path: "org/repo",
+			want: "https://gitea.example.com/org/repo",
+		},
+		{
+			name: "forgejo instance preserved",
+			host: "forgejo.example.com",
+			path: "org/repo",
+			want: "https://forgejo.example.com/org/repo",
+		},
+		// Ошибки.
 		{
 			name:    "empty path",
 			host:    "github.com",
 			path:    "",
+			wantErr: true,
+		},
+		{
+			name:    "only .git in path",
+			host:    "github.com",
+			path:    ".git",
 			wantErr: true,
 		},
 	}

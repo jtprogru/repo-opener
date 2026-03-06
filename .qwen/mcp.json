@@ -1,0 +1,80 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "description": "Доступ к файловой системе проекта"
+    },
+    "git": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git"
+      ],
+      "description": "Git-операции: коммиты, ветки, история"
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "Интеграция с GitHub: PR, issues, releases"
+    },
+    "terminal": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-terminal"
+      ],
+      "description": "Выполнение терминальных команд"
+    },
+    "golang": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-golang"
+      ],
+      "description": "Анализ Go-кода, навигация, рефакторинг"
+    },
+    "security": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-security"
+      ],
+      "description": "Сканирование уязвимостей"
+    },
+    "logs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-logs"
+      ],
+      "description": "Анализ логов сборки и тестов"
+    },
+    "web-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-web-search"
+      ],
+      "description": "Поиск актуальной информации по Go и библиотекам"
+    },
+    "time": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-time"
+      ],
+      "description": "Работа с датами и временем"
+    }
+  }
+}

@@ -15,19 +15,28 @@ import (
 const (
 	ErrOriginRemoteNotFound = "origin remote not found"
 	ErrEmptyRepositoryPath  = "empty repository path"
+
+	GitHubHost    = "github.com"
+	GitLabHost    = "gitlab.com"
+	BitbucketHost = "bitbucket.org"
 )
 
 var (
-	Version = "dev"     //nolint:gochecknoglobals // This is normal
-	Commit  = "none"    //nolint:gochecknoglobals // This is normal
-	Date    = "unknown" //nolint:gochecknoglobals // This is normal
-	BuiltBy = "unknown" //nolint:gochecknoglobals // This is normal
-
-	versionFlag bool //nolint:gochecknoglobals // This is normal
+	Version     = "dev"     //nolint:gochecknoglobals // This is normal
+	Commit      = "none"    //nolint:gochecknoglobals // This is normal
+	Date        = "unknown" //nolint:gochecknoglobals // This is normal
+	BuiltBy     = "unknown" //nolint:gochecknoglobals // This is normal
+	versionFlag bool        //nolint:gochecknoglobals // This is normal
+	remoteName  string      //nolint:gochecknoglobals // This is normal
+	dryRunFlag  bool        //nolint:gochecknoglobals // This is normal
+	printFlag   bool        //nolint:gochecknoglobals // This is normal
 )
 
 func main() {
 	flag.BoolVar(&versionFlag, "version", false, "Print version information and exit")
+	flag.BoolVar(&dryRunFlag, "dry-run", false, "Show URL without opening browser")
+	flag.BoolVar(&printFlag, "print", false, "Print URL to stdout and exit")
+	flag.StringVar(&remoteName, "remote", "origin", "Remote name to use (default: origin)")
 
 	flag.Parse()
 
@@ -36,13 +45,15 @@ func main() {
 		fmt.Printf("Build info: commit %s, built at %s, by %s\n", Commit, Date, BuiltBy)
 		return
 	}
-	// Проверяем, что находимся в Git-репозитории.
-	if err := checkGitRepo(); err != nil {
-		exitWithError(err)
+
+	// Открываем Git-репозиторий.
+	repo, err := git.PlainOpen(".")
+	if err != nil {
+		exitWithError(fmt.Errorf("not a git repository: %w", err))
 	}
 
-	// Получаем URL origin remote.
-	remoteURL, err := getRemoteURL()
+	// Получаем URL remote.
+	remoteURL, err := getRemoteURL(repo, remoteName)
 	if err != nil {
 		exitWithError(err)
 	}
@@ -53,6 +64,18 @@ func main() {
 		exitWithError(err)
 	}
 
+	// Режим -print: только выводим URL.
+	if printFlag {
+		fmt.Println(webURL)
+		return
+	}
+
+	// Режим -dry-run: показываем, что сделали бы.
+	if dryRunFlag {
+		fmt.Printf("Would open: %s\n", webURL)
+		return
+	}
+
 	// Открываем URL в браузере.
 	if err := browser.OpenURL(webURL); err != nil {
 		exitWithError(fmt.Errorf("failed to open browser: %w", err))
@@ -61,34 +84,21 @@ func main() {
 	fmt.Printf("Opened repository URL: %s\n", webURL)
 }
 
-func checkGitRepo() error {
-	_, err := git.PlainOpen(".")
-	if err != nil {
-		return fmt.Errorf("not a git repository: %w", err)
-	}
-	return nil
-}
-
-func getRemoteURL() (string, error) {
-	repo, err := git.PlainOpen(".")
-	if err != nil {
-		return "", fmt.Errorf("failed to open git repository: %w", err)
-	}
-
+func getRemoteURL(repo *git.Repository, name string) (string, error) {
 	remotes, err := repo.Remotes()
 	if err != nil {
 		return "", fmt.Errorf("failed to get remotes: %w", err)
 	}
 
 	for _, remote := range remotes {
-		if remote.Config().Name == "origin" {
+		if remote.Config().Name == name {
 			if len(remote.Config().URLs) > 0 {
 				return remote.Config().URLs[0], nil
 			}
 		}
 	}
 
-	return "", errors.New(ErrOriginRemoteNotFound)
+	return "", fmt.Errorf("remote %q not found", name)
 }
 
 func parseRemoteURL(remoteURL string) (string, error) {
@@ -159,13 +169,20 @@ func buildWebURL(hostOrigin, path string) (string, error) {
 		return "", errors.New(ErrEmptyRepositoryPath)
 	}
 
-	// Определяем тип хоста.
-	scheme := "https://"
-	if strings.Contains(host, "github") {
-		host = "github.com"
+	// Нормализуем хост только для публичных Git-платформ.
+	// Приватные инсталляции (gitlab.company.com, git.internal) не изменяем.
+	switch host {
+	case "github.com", "www.github.com":
+		host = GitHubHost
+	case "gitlab.com", "www.gitlab.com":
+		host = GitLabHost
+	case "bitbucket.org", "www.bitbucket.org":
+		host = BitbucketHost
+	default:
+		// Приватные инсталляции сохраняем как есть.
 	}
 
-	return fmt.Sprintf("%s%s/%s", scheme, host, cleanPath), nil
+	return fmt.Sprintf("%s%s/%s", "https://", host, cleanPath), nil
 }
 
 func exitWithError(err error) {
