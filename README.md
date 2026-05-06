@@ -10,9 +10,17 @@ Simple utility that prints the current Git repository's remote HTTP URL — work
 
 ## Installation
 
-For installation you need to load latest version from [Release](https://github.com/jtprogru/repo-opener/releases) page and download version for you platform.
+### Homebrew (macOS / Linux)
 
-Another way is usage `go install`:
+```sh
+brew install jtprogru/tap/repo-opener
+```
+
+### Pre-built binaries
+
+Download the archive for your platform from the [Releases](https://github.com/jtprogru/repo-opener/releases) page.
+
+### `go install`
 
 ```sh
 # Get latest version from CLI
