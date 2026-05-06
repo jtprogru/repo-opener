@@ -43,7 +43,7 @@ builds:
       - -s -w -X main.Version={{.Version}} -X main.Commit={{.Commit}} -X main.Date={{.Date}} -X main.BuiltBy=goreleaser
 
 archives:
-  - formats: ["tar.gz", "zip"] # Plural form, multiple formats. Since: v2.6
+  - formats: ["tar.gz"]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}{{- if .Arm64 }}v{{ .Arm64 }}{{ end }}{{ if .Prerelease }}_{{ .Prerelease }}{{ end }}
     allow_different_binary_count: false
@@ -69,4 +69,4 @@ homebrew_casks:
   - repository:
       owner: jtprogru
       name: homebrew-tap
-    directory: Formula
+    directory: Casks
