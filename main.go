@@ -28,14 +28,13 @@ var (
 	BuiltBy     = "unknown" //nolint:gochecknoglobals // This is normal
 	versionFlag bool        //nolint:gochecknoglobals // This is normal
 	remoteName  string      //nolint:gochecknoglobals // This is normal
-	dryRunFlag  bool        //nolint:gochecknoglobals // This is normal
-	printFlag   bool        //nolint:gochecknoglobals // This is normal
+	openFlag    bool        //nolint:gochecknoglobals // This is normal
 )
 
 func main() {
 	flag.BoolVar(&versionFlag, "version", false, "Print version information and exit")
-	flag.BoolVar(&dryRunFlag, "dry-run", false, "Show URL without opening browser")
-	flag.BoolVar(&printFlag, "print", false, "Print URL to stdout and exit")
+	flag.BoolVar(&openFlag, "open", false, "Open the remote URL in the default browser")
+	flag.BoolVar(&openFlag, "o", false, "Open the remote URL in the default browser (shorthand)")
 	flag.StringVar(&remoteName, "remote", "origin", "Remote name to use (default: origin)")
 
 	flag.Parse()
@@ -46,42 +45,28 @@ func main() {
 		return
 	}
 
-	// Открываем Git-репозиторий.
 	repo, err := git.PlainOpen(".")
 	if err != nil {
 		exitWithError(fmt.Errorf("not a git repository: %w", err))
 	}
 
-	// Получаем URL remote.
 	remoteURL, err := getRemoteURL(repo, remoteName)
 	if err != nil {
 		exitWithError(err)
 	}
 
-	// Парсим URL и конвертируем в веб-формат.
 	webURL, err := parseRemoteURL(remoteURL)
 	if err != nil {
 		exitWithError(err)
 	}
 
-	// Режим -print: только выводим URL.
-	if printFlag {
-		fmt.Println(webURL)
-		return
-	}
+	fmt.Println(webURL)
 
-	// Режим -dry-run: показываем, что сделали бы.
-	if dryRunFlag {
-		fmt.Printf("Would open: %s\n", webURL)
-		return
+	if openFlag {
+		if err := browser.OpenURL(webURL); err != nil {
+			exitWithError(fmt.Errorf("failed to open browser: %w", err))
+		}
 	}
-
-	// Открываем URL в браузере.
-	if err := browser.OpenURL(webURL); err != nil {
-		exitWithError(fmt.Errorf("failed to open browser: %w", err))
-	}
-
-	fmt.Printf("Opened repository URL: %s\n", webURL)
 }
 
 func getRemoteURL(repo *git.Repository, name string) (string, error) {

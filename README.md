@@ -6,7 +6,7 @@
 [![bearer](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml)
 [![GitHub stars](https://img.shields.io/github/stars/jtprogru/repo-opener?style=plastic&color=5BB359)](https://github.com/jtprogru/repo-opener/stargazers)
 
-Simple utility for fast open current repository in browser.
+Simple utility that prints the current Git repository's remote HTTP URL — works for public hosts (GitHub/GitLab/Bitbucket) and self-hosted installations alike. Optionally opens the URL in your default browser.
 
 ## Installation
 
@@ -28,7 +28,7 @@ To use `repo-opener`, simply run the following command in your terminal:
 repo-opener
 ```
 
-This will open the current Git repository's remote URL in your default web browser.
+This prints the current Git repository's remote HTTP URL to stdout. To also open it in your default browser, pass `-o`/`--open`.
 
 To make life easier, you can add an alias like this:
 
@@ -41,29 +41,25 @@ After which you will have the command `rop` for running `repo-opener`.
 ### Options
 
 - `-version`: Print version and build information and exit.
-- `-print`: Print URL to stdout and exit (without opening browser).
-- `-dry-run`: Show what URL would be opened (without opening browser).
+- `-o`, `--open`: Print the URL and also open it in the default browser.
 - `-remote <name>`: Specify remote name to use (default: `origin`).
 
 ### Examples
 
 ```sh
-# Open current repository in browser
+# Print current repository URL (default behavior)
 repo-opener
-
-# Print URL without opening browser
-repo-opener -print
 # Output: https://github.com/user/repo
 
-# Show what would be opened (dry run)
-repo-opener -dry-run
-# Output: Would open: https://github.com/user/repo
+# Print and open the URL in the default browser
+repo-opener -o
+repo-opener --open
 
-# Use different remote (e.g., upstream)
+# Use a different remote (e.g., upstream)
 repo-opener -remote upstream
 
 # Combine flags
-repo-opener -print -remote origin
+repo-opener --open -remote upstream
 ```
 
 ## Supported Git Hosts
@@ -125,7 +121,7 @@ git init
 
 **Solution:**
 - Ensure you have a default browser configured
-- On headless systems, consider using `-print` flag (if available)
+- On headless systems, simply omit `-o`/`--open` — the default behavior only prints the URL
 
 ### Private GitLab/GitHub Enterprise not working
 
