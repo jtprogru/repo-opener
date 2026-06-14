@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -31,56 +32,73 @@ var (
 	ErrUnsupportedURLFormat  = errors.New("unsupported URL format")
 	ErrInvalidSSHURL         = errors.New("invalid SSH URL format")
 	ErrUnsupportedScheme     = errors.New("unsupported scheme")
-	ErrUnsupportedSSHUser    = errors.New("unsupported SSH username")
 	ErrInvalidResultURL      = errors.New("invalid resulting URL")
 )
 
 var (
-	Version     = "dev"     //nolint:gochecknoglobals // This is normal
-	Commit      = "none"    //nolint:gochecknoglobals // This is normal
-	Date        = "unknown" //nolint:gochecknoglobals // This is normal
-	BuiltBy     = "unknown" //nolint:gochecknoglobals // This is normal
-	versionFlag bool        //nolint:gochecknoglobals // This is normal
-	remoteName  string      //nolint:gochecknoglobals // This is normal
-	openFlag    bool        //nolint:gochecknoglobals // This is normal
+	Version = "dev"     //nolint:gochecknoglobals // Set via -ldflags at build time.
+	Commit  = "none"    //nolint:gochecknoglobals // Set via -ldflags at build time.
+	Date    = "unknown" //nolint:gochecknoglobals // Set via -ldflags at build time.
+	BuiltBy = "unknown" //nolint:gochecknoglobals // Set via -ldflags at build time.
 )
 
 func main() {
-	flag.BoolVar(&versionFlag, "version", false, "Print version information and exit")
-	flag.BoolVar(&openFlag, "open", false, "Open the remote URL in the default browser")
-	flag.BoolVar(&openFlag, "o", false, "Open the remote URL in the default browser (shorthand)")
-	flag.StringVar(&remoteName, "remote", "origin", "Remote name to use (default: origin)")
+	if err := run(os.Args[1:], os.Stdout, browser.OpenURL); err != nil {
+		exitWithError(err)
+	}
+}
 
-	flag.Parse()
+// run содержит всю логику CLI и вынесен из main для тестируемости:
+// out принимает обычный вывод, openURL — функцию открытия в браузере.
+func run(args []string, out io.Writer, openURL func(string) error) error {
+	var (
+		versionFlag bool
+		openFlag    bool
+		remoteName  string
+	)
+
+	fs := flag.NewFlagSet("repo-opener", flag.ContinueOnError)
+	fs.SetOutput(out)
+	fs.BoolVar(&versionFlag, "version", false, "Print version information and exit")
+	fs.BoolVar(&openFlag, "open", false, "Open the remote URL in the default browser")
+	fs.BoolVar(&openFlag, "o", false, "Open the remote URL in the default browser (shorthand)")
+	fs.StringVar(&remoteName, "remote", "origin", "Remote name to use (default: origin)")
+
+	if err := fs.Parse(args); err != nil {
+		return fmt.Errorf("failed to parse flags: %w", err)
+	}
 
 	if versionFlag {
-		fmt.Println("Version:", Version)
-		fmt.Printf("Build info: commit %s, built at %s, by %s\n", Commit, Date, BuiltBy)
-		return
+		fmt.Fprintln(out, "Version:", Version)
+		fmt.Fprintf(out, "Build info: commit %s, built at %s, by %s\n", Commit, Date, BuiltBy)
+
+		return nil
 	}
 
 	repo, err := git.PlainOpen(".")
 	if err != nil {
-		exitWithError(fmt.Errorf("not a git repository: %w", err))
+		return fmt.Errorf("not a git repository: %w", err)
 	}
 
 	remoteURL, err := getRemoteURL(repo, remoteName)
 	if err != nil {
-		exitWithError(err)
+		return err
 	}
 
 	webURL, err := parseRemoteURL(remoteURL)
 	if err != nil {
-		exitWithError(err)
+		return err
 	}
 
-	fmt.Println(webURL)
+	fmt.Fprintln(out, webURL)
 
 	if openFlag {
-		if err := browser.OpenURL(webURL); err != nil {
-			exitWithError(fmt.Errorf("failed to open browser: %w", err))
+		if err := openURL(webURL); err != nil {
+			return fmt.Errorf("failed to open browser: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func getRemoteURL(repo *git.Repository, name string) (string, error) {
@@ -140,12 +158,11 @@ func parseStructuredURL(u *url.URL) (string, error) {
 		path = u.Path
 	case "ssh", "git":
 		// Для ssh/git порт относится к транспорту, а не к веб-интерфейсу,
-		// поэтому отбрасываем его через Hostname().
+		// поэтому отбрасываем его через Hostname(). Имя пользователя для
+		// веб-URL не нужно, поэтому любые пользователи допустимы (self-hosted
+		// инсталляции нередко используют не git-пользователя).
 		host = u.Hostname()
 		path = u.Path
-		if u.Scheme == "ssh" && u.User != nil && u.User.Username() != "git" {
-			return "", fmt.Errorf("%w: %s", ErrUnsupportedSSHUser, u.User.Username())
-		}
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedScheme, u.Scheme)
 	}
