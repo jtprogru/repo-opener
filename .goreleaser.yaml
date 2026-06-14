@@ -71,3 +71,13 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
+    # The binary is not signed/notarized with an Apple Developer ID, so macOS
+    # Gatekeeper quarantines it ("Apple could not verify ... is free of
+    # malware"). Strip the quarantine attribute on install so the cask works
+    # out of the box.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/repo-opener"]
+          end
