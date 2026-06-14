@@ -145,6 +145,22 @@ git remote -v
 # HTTPS format: https://host.com/org/repo.git
 ```
 
+### macOS: "Apple could not verify 'repo-opener' is free of malware"
+
+**Cause:** The released binaries are not signed/notarized with an Apple Developer ID, so macOS Gatekeeper quarantines them.
+
+**Solution:**
+
+- **Homebrew (recommended):** as of `0.6.1` the cask removes the quarantine attribute on install. Upgrade and the warning is gone:
+  ```sh
+  brew upgrade repo-opener   # or: brew reinstall repo-opener
+  ```
+- **Direct download from [Releases](https://github.com/jtprogru/repo-opener/releases):** strip the quarantine attribute manually after extracting:
+  ```sh
+  xattr -dr com.apple.quarantine /path/to/repo-opener
+  ```
+- **Or via the GUI:** run it once, then go to System Settings → Privacy & Security → "Open Anyway".
+
 ## License
 
 [LICENSE](LICENSE)
