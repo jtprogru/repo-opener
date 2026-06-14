@@ -13,12 +13,26 @@ import (
 )
 
 const (
-	ErrOriginRemoteNotFound = "origin remote not found"
-	ErrEmptyRepositoryPath  = "empty repository path"
-
 	GitHubHost    = "github.com"
 	GitLabHost    = "gitlab.com"
 	BitbucketHost = "bitbucket.org"
+
+	// minPathSegments — минимальное число сегментов пути (owner/repo).
+	minPathSegments = 2
+	// scpURLParts — число частей при разборе scp-URL по первому двоеточию.
+	scpURLParts = 2
+)
+
+// Sentinel-ошибки для программной проверки через errors.Is.
+var (
+	ErrRemoteNotFound        = errors.New("remote not found")
+	ErrEmptyRepositoryPath   = errors.New("empty repository path")
+	ErrInvalidRepositoryPath = errors.New("invalid repository path")
+	ErrUnsupportedURLFormat  = errors.New("unsupported URL format")
+	ErrInvalidSSHURL         = errors.New("invalid SSH URL format")
+	ErrUnsupportedScheme     = errors.New("unsupported scheme")
+	ErrUnsupportedSSHUser    = errors.New("unsupported SSH username")
+	ErrInvalidResultURL      = errors.New("invalid resulting URL")
 )
 
 var (
@@ -76,28 +90,45 @@ func getRemoteURL(repo *git.Repository, name string) (string, error) {
 	}
 
 	for _, remote := range remotes {
-		if remote.Config().Name == name {
-			if len(remote.Config().URLs) > 0 {
-				return remote.Config().URLs[0], nil
-			}
+		cfg := remote.Config()
+		if cfg.Name == name && len(cfg.URLs) > 0 {
+			return cfg.URLs[0], nil
 		}
 	}
 
-	return "", fmt.Errorf("remote %q not found", name)
+	return "", fmt.Errorf("%w: %q", ErrRemoteNotFound, name)
 }
 
 func parseRemoteURL(remoteURL string) (string, error) {
-	// Пытаемся парсить как стандартный URL.
+	// scp-подобный формат [user@]host:path разбираем до url.Parse, потому что
+	// "host:path" парсер ошибочно принимает за схему ("host").
+	if isSCPLikeURL(remoteURL) {
+		return parseSCPURL(remoteURL)
+	}
+
+	// Стандартный URL со схемой (http(s), ssh, git).
 	if u, err := url.Parse(remoteURL); err == nil && u.Scheme != "" {
 		return parseStructuredURL(u)
 	}
 
-	// Обрабатываем SSH-формат (git@host:path).
-	if strings.HasPrefix(remoteURL, "git@") {
-		return parseSSHURL(remoteURL)
+	return "", fmt.Errorf("%w: %s", ErrUnsupportedURLFormat, remoteURL)
+}
+
+// isSCPLikeURL сообщает, что строка имеет scp-подобный вид [user@]host:path:
+// содержит двоеточие раньше первого слэша и не содержит "://".
+func isSCPLikeURL(remoteURL string) bool {
+	if strings.Contains(remoteURL, "://") {
+		return false
 	}
 
-	return "", fmt.Errorf("unsupported URL format: %s", remoteURL)
+	colon := strings.IndexByte(remoteURL, ':')
+	if colon < 0 {
+		return false
+	}
+
+	slash := strings.IndexByte(remoteURL, '/')
+
+	return slash < 0 || colon < slash
 }
 
 func parseStructuredURL(u *url.URL) (string, error) {
@@ -107,41 +138,42 @@ func parseStructuredURL(u *url.URL) (string, error) {
 	case "http", "https":
 		host = u.Host
 		path = u.Path
-	case "ssh":
-		host = u.Host
+	case "ssh", "git":
+		// Для ssh/git порт относится к транспорту, а не к веб-интерфейсу,
+		// поэтому отбрасываем его через Hostname().
+		host = u.Hostname()
 		path = u.Path
-		if u.User != nil && u.User.Username() != "git" {
-			return "", fmt.Errorf("unsupported SSH username: %s", u.User.Username())
+		if u.Scheme == "ssh" && u.User != nil && u.User.Username() != "git" {
+			return "", fmt.Errorf("%w: %s", ErrUnsupportedSSHUser, u.User.Username())
 		}
 	default:
-		return "", fmt.Errorf("unsupported scheme: %s", u.Scheme)
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedScheme, u.Scheme)
 	}
 
 	if path == "" {
-		return "", errors.New("empty repository path")
+		return "", ErrEmptyRepositoryPath
 	}
 
 	return buildWebURL(host, path)
 }
 
-func parseSSHURL(remoteURL string) (string, error) {
-	parts := strings.SplitN(remoteURL, ":", 2)
-	if len(parts) != 2 {
-		return "", errors.New("invalid SSH URL format")
+func parseSCPURL(remoteURL string) (string, error) {
+	parts := strings.SplitN(remoteURL, ":", scpURLParts)
+	if len(parts) != scpURLParts {
+		return "", ErrInvalidSSHURL
 	}
 
-	host := strings.TrimPrefix(parts[0], "git@")
-	path := strings.Trim(parts[1], "/")
-
-	if path == "" {
-		return "", errors.New(ErrEmptyRepositoryPath)
+	// Отбрасываем необязательный [user@] — для веб-URL имя пользователя не нужно.
+	host := parts[0]
+	if at := strings.LastIndexByte(host, '@'); at >= 0 {
+		host = host[at+1:]
 	}
 
-	if len(strings.Split(path, "/")) < 2 {
-		return "", errors.New("invalid SSH URL format")
+	if host == "" {
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedURLFormat, remoteURL)
 	}
 
-	return buildWebURL(host, path)
+	return buildWebURL(host, strings.Trim(parts[1], "/"))
 }
 
 func buildWebURL(hostOrigin, path string) (string, error) {
@@ -151,7 +183,12 @@ func buildWebURL(hostOrigin, path string) (string, error) {
 	// Удаляем .git в конце пути и ведущие/конечные слэши.
 	cleanPath := strings.Trim(strings.TrimSuffix(path, ".git"), "/")
 	if cleanPath == "" {
-		return "", errors.New(ErrEmptyRepositoryPath)
+		return "", ErrEmptyRepositoryPath
+	}
+
+	// Путь к репозиторию всегда состоит как минимум из owner/repo.
+	if len(strings.Split(cleanPath, "/")) < minPathSegments {
+		return "", fmt.Errorf("%w: %s", ErrInvalidRepositoryPath, cleanPath)
 	}
 
 	// Нормализуем хост только для публичных Git-платформ.
@@ -167,7 +204,20 @@ func buildWebURL(hostOrigin, path string) (string, error) {
 		// Приватные инсталляции сохраняем как есть.
 	}
 
-	return fmt.Sprintf("%s%s/%s", "https://", host, cleanPath), nil
+	webURL := fmt.Sprintf("%s%s/%s", "https://", host, cleanPath)
+
+	// Defense-in-depth: убеждаемся, что собранная строка — корректный https-URL
+	// с непустым хостом, прежде чем выводить её или открывать в браузере.
+	parsed, err := url.Parse(webURL)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrInvalidResultURL, err)
+	}
+
+	if parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", fmt.Errorf("%w: %s", ErrInvalidResultURL, webURL)
+	}
+
+	return webURL, nil
 }
 
 func exitWithError(err error) {
