@@ -62,8 +62,8 @@ func TestGetRemoteURL(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = getRemoteURL(repo, "nonexistent")
-		require.Error(t, err)
-		assert.ErrorContains(t, err, `remote "nonexistent" not found`)
+		require.ErrorIs(t, err, ErrRemoteNotFound)
+		assert.ErrorContains(t, err, "nonexistent")
 	})
 }
 
@@ -106,6 +106,30 @@ func TestParseRemoteURL(t *testing.T) {
 	require.NoError(t, err, "Expected no error for valid SSH URL")
 	assert.Equal(t, "https://bitbucket.org/org/repo", webURL)
 
+	// Test case: ssh:// scheme with SSH port is stripped.
+	webURL, err = parseRemoteURL("ssh://git@github.com:22/org/repo.git")
+	require.NoError(t, err, "Expected no error for ssh:// URL with port")
+	assert.Equal(t, "https://github.com/org/repo", webURL)
+
+	// Test case: git:// protocol is supported.
+	webURL, err = parseRemoteURL("git://github.com/org/repo.git")
+	require.NoError(t, err, "Expected no error for git:// URL")
+	assert.Equal(t, "https://github.com/org/repo", webURL)
+
+	// Test case: scp-like URL without git@ user.
+	webURL, err = parseRemoteURL("github.com:org/repo.git")
+	require.NoError(t, err, "Expected no error for scp-like URL without user")
+	assert.Equal(t, "https://github.com/org/repo", webURL)
+
+	// Test case: scp-like URL with a custom user.
+	webURL, err = parseRemoteURL("org-ssh@github.com:org/repo.git")
+	require.NoError(t, err, "Expected no error for scp-like URL with custom user")
+	assert.Equal(t, "https://github.com/org/repo", webURL)
+
+	// Test case: single-segment path is rejected (http).
+	_, err = parseRemoteURL("https://github.com/onlyuser")
+	require.ErrorIs(t, err, ErrInvalidRepositoryPath)
+
 	// Test case: invalid SSH URL.
 	invalidSSHURL := "git@github.com:user"
 	_, err = parseRemoteURL(invalidSSHURL)
@@ -114,7 +138,7 @@ func TestParseRemoteURL(t *testing.T) {
 	// Test case: unsupported URL format.
 	invalidURL := "ftp://example.com/repo.git"
 	_, err = parseRemoteURL(invalidURL)
-	require.Error(t, err, "Expected error for unsupported URL format")
+	require.ErrorIs(t, err, ErrUnsupportedScheme)
 }
 
 func TestParseStructuredURL(t *testing.T) {
@@ -129,37 +153,56 @@ func TestParseStructuredURL(t *testing.T) {
 	// Test case: missing path.
 	u, _ = url.Parse("https://github.com") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	require.Error(t, err, "Expected error for empty repository path")
+	require.ErrorIs(t, err, ErrEmptyRepositoryPath)
+
+	// Test case: ssh scheme with port is stripped from the web host.
+	u, _ = url.Parse("ssh://git@github.com:22/jtprogru/repo-opener.git") //nolint:errcheck // Ignore error from url.Parse
+	webURL, err = parseStructuredURL(u)
+	require.NoError(t, err, "Expected no error for ssh URL with port")
+	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
+
+	// Test case: git scheme is supported.
+	u, _ = url.Parse("git://github.com/jtprogru/repo-opener.git") //nolint:errcheck // Ignore error from url.Parse
+	webURL, err = parseStructuredURL(u)
+	require.NoError(t, err, "Expected no error for git scheme")
+	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
 	// Test case: ssh scheme with invalid user.
 	u, _ = url.Parse("ssh://user@github.com/jtprogru/repo-opener.git") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	require.Error(t, err, "Expected error for unsupported SSH username")
+	require.ErrorIs(t, err, ErrUnsupportedSSHUser)
 
 	// Test case: unsupported scheme.
 	u, _ = url.Parse("ftp://example.com/repo.git") //nolint:errcheck // Ignore error from url.Parse
 	_, err = parseStructuredURL(u)
-	require.Error(t, err, "Expected error for unsupported scheme")
+	require.ErrorIs(t, err, ErrUnsupportedScheme)
 }
 
-func TestParseSSHURL(t *testing.T) {
+func TestParseSCPURL(t *testing.T) {
 	t.Parallel()
 
 	// Test case: valid SSH URL.
 	sshURL := "git@github.com:jtprogru/repo-opener.git"
-	webURL, err := parseSSHURL(sshURL)
+	webURL, err := parseSCPURL(sshURL)
 	require.NoError(t, err, "Expected no error for valid SSH URL")
 	assert.Equal(t, "https://github.com/jtprogru/repo-opener", webURL)
 
-	// Test case: invalid SSH URL.
-	invalidSSHURL := "git@github.com:user"
-	_, err = parseSSHURL(invalidSSHURL)
-	require.Error(t, err, "Expected error for invalid SSH URL")
+	// Test case: custom user is discarded.
+	webURL, err = parseSCPURL("org-ssh@gitlab.com:org/repo.git")
+	require.NoError(t, err, "Expected no error for custom user")
+	assert.Equal(t, "https://gitlab.com/org/repo", webURL)
+
+	// Test case: single-segment path is rejected.
+	_, err = parseSCPURL("git@github.com:user")
+	require.ErrorIs(t, err, ErrInvalidRepositoryPath)
 
 	// Test case: empty path.
-	emptyPathURL := "git@github.com:/"
-	_, err = parseSSHURL(emptyPathURL)
-	assert.ErrorContains(t, err, ErrEmptyRepositoryPath)
+	_, err = parseSCPURL("git@github.com:/")
+	require.ErrorIs(t, err, ErrEmptyRepositoryPath)
+
+	// Test case: missing host.
+	_, err = parseSCPURL(":org/repo.git")
+	require.ErrorIs(t, err, ErrUnsupportedURLFormat)
 }
 
 func TestBuildWebURL(t *testing.T) {
@@ -247,6 +290,18 @@ func TestBuildWebURL(t *testing.T) {
 			path:    ".git",
 			wantErr: true,
 		},
+		{
+			name:    "single segment path",
+			host:    "github.com",
+			path:    "onlyuser",
+			wantErr: true,
+		},
+		{
+			name:    "invalid host produces invalid url",
+			host:    "bad host",
+			path:    "org/repo",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -261,6 +316,33 @@ func TestBuildWebURL(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsSCPLikeURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		remoteURL string
+		want      bool
+	}{
+		{name: "git@ scp form", remoteURL: "git@github.com:org/repo.git", want: true},
+		{name: "scp without user", remoteURL: "github.com:org/repo.git", want: true},
+		{name: "custom user scp", remoteURL: "org-ssh@github.com:org/repo.git", want: true},
+		{name: "https url", remoteURL: "https://github.com/org/repo.git", want: false},
+		{name: "ssh url with scheme", remoteURL: "ssh://git@github.com/org/repo.git", want: false},
+		{name: "git url with scheme", remoteURL: "git://github.com/org/repo.git", want: false},
+		{name: "no colon", remoteURL: "github.com/org/repo", want: false},
+		{name: "colon after slash", remoteURL: "/path/to:repo", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, isSCPLikeURL(tt.remoteURL))
 		})
 	}
 }
