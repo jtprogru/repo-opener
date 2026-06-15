@@ -7,9 +7,13 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/pkg/browser"
 )
 
@@ -22,6 +26,9 @@ const (
 	minPathSegments = 2
 	// scpURLParts — число частей при разборе scp-URL по первому двоеточию.
 	scpURLParts = 2
+
+	// gitDirName — имя служебного каталога git внутри репозитория.
+	gitDirName = ".git"
 )
 
 // Sentinel-ошибки для программной проверки через errors.Is.
@@ -75,12 +82,7 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 		return nil
 	}
 
-	repo, err := git.PlainOpen(".")
-	if err != nil {
-		return fmt.Errorf("not a git repository: %w", err)
-	}
-
-	remoteURL, err := getRemoteURL(repo, remoteName)
+	remoteURL, err := resolveRemoteURL(".", remoteName)
 	if err != nil {
 		return err
 	}
@@ -99,6 +101,53 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 	}
 
 	return nil
+}
+
+// resolveRemoteURL возвращает URL ремоута name для репозитория в dir.
+//
+// Сначала используется обычный путь go-git (git.PlainOpen). Если go-git
+// отказывается открывать репозиторий из-за включённых git-расширений
+// (например extensions.worktreeConfig, который выставляют VS Code и
+// git worktree), выполняется запасной путь: конфиг читается напрямую, минуя
+// проверку расширений, поскольку для построения веб-URL достаточно прочитать
+// секцию remote.
+func resolveRemoteURL(dir, name string) (string, error) {
+	repo, err := git.PlainOpen(dir)
+	if err == nil {
+		return getRemoteURL(repo, name)
+	}
+
+	if errors.Is(err, git.ErrUnsupportedExtensionRepositoryFormatVersion) ||
+		errors.Is(err, git.ErrUnknownExtension) {
+		return remoteURLFromConfig(dir, name)
+	}
+
+	return "", fmt.Errorf("not a git repository: %w", err)
+}
+
+// remoteURLFromConfig возвращает первый URL ремоута name, читая конфигурацию
+// через слой хранилища go-git напрямую (filesystem.Storage.Config), минуя
+// git.Open и его проверку расширений. Файловый ввод-вывод выполняет go-git
+// поверх go-billy — собственных обращений к os мы не делаем.
+func remoteURLFromConfig(dir, name string) (string, error) {
+	dotGit := osfs.New(filepath.Join(dir, gitDirName))
+	if _, err := dotGit.Stat(""); err != nil {
+		return "", fmt.Errorf("not a git repository: %w", err)
+	}
+
+	storer := filesystem.NewStorage(dotGit, cache.NewObjectLRUDefault())
+
+	cfg, err := storer.Config()
+	if err != nil {
+		return "", fmt.Errorf("failed to read git config: %w", err)
+	}
+
+	remote, ok := cfg.Remotes[name]
+	if !ok || len(remote.URLs) == 0 {
+		return "", fmt.Errorf("%w: %q", ErrRemoteNotFound, name)
+	}
+
+	return remote.URLs[0], nil
 }
 
 func getRemoteURL(repo *git.Repository, name string) (string, error) {

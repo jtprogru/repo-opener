@@ -632,6 +632,84 @@ func TestRun(t *testing.T) {
 	})
 }
 
+func TestResolveRemoteURL(t *testing.T) {
+	t.Run("falls back to direct config read when worktreeConfig extension is set", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setOriginRemote(t, repoPath, "git@github.com:org/repo.git")
+		enableWorktreeConfig(t, repoPath)
+
+		// go-git отказывается открыть такой репозиторий — проверяем это явно,
+		// чтобы тест ловил именно срабатывание запасного пути.
+		_, openErr := git.PlainOpen(repoPath)
+		require.Error(t, openErr)
+
+		withChdir(t, repoPath)
+
+		remoteURL, err := resolveRemoteURL(".", "origin")
+		require.NoError(t, err)
+		assert.Equal(t, "git@github.com:org/repo.git", remoteURL)
+	})
+
+	t.Run("fallback reports missing remote, not a missing repository", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setOriginRemote(t, repoPath, "git@github.com:org/repo.git")
+		enableWorktreeConfig(t, repoPath)
+		withChdir(t, repoPath)
+
+		_, err := resolveRemoteURL(".", "upstream")
+		require.ErrorIs(t, err, ErrRemoteNotFound)
+		assert.NotContains(t, err.Error(), "not a git repository")
+	})
+
+	t.Run("end-to-end run resolves url with worktreeConfig extension", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setOriginRemote(t, repoPath, "git@github.com:org/repo.git")
+		enableWorktreeConfig(t, repoPath)
+		withChdir(t, repoPath)
+
+		var buf bytes.Buffer
+		require.NoError(t, run(nil, &buf, func(string) error { return nil }))
+		assert.Equal(t, "https://github.com/org/repo\n", buf.String())
+	})
+
+	t.Run("non-repository still reports not a git repository", func(t *testing.T) {
+		dir := t.TempDir()
+
+		_, err := resolveRemoteURL(dir, "origin")
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "not a git repository")
+	})
+}
+
+func setOriginRemote(t *testing.T, repoPath, remoteURL string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{remoteURL},
+	})
+	require.NoError(t, err)
+}
+
+// enableWorktreeConfig включает расширение extensions.worktreeConfig — то же,
+// что выставляют VS Code и git worktree и что заставляет go-git отказаться
+// открывать репозиторий через git.PlainOpen.
+func enableWorktreeConfig(t *testing.T, repoPath string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	cfg, err := repo.Config()
+	require.NoError(t, err)
+
+	cfg.Raw.Section("extensions").SetOption("worktreeConfig", "true")
+	require.NoError(t, repo.Storer.SetConfig(cfg))
+}
+
 func initTempRepo(t *testing.T) string {
 	t.Helper()
 
