@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/pkg/browser"
 )
 
@@ -26,14 +27,8 @@ const (
 	// scpURLParts — число частей при разборе scp-URL по первому двоеточию.
 	scpURLParts = 2
 
-	// gitDirName — имя служебного каталога (или файла) git внутри репозитория.
+	// gitDirName — имя служебного каталога git внутри репозитория.
 	gitDirName = ".git"
-	// gitConfigName — имя файла конфигурации внутри git-каталога.
-	gitConfigName = "config"
-	// gitCommonDirName — имя файла-указателя на общий git-каталог в linked-worktree.
-	gitCommonDirName = "commondir"
-	// gitdirPrefix — префикс строки-указателя в файле .git (worktree/submodule).
-	gitdirPrefix = "gitdir:"
 )
 
 // Sentinel-ошибки для программной проверки через errors.Is.
@@ -130,21 +125,19 @@ func resolveRemoteURL(dir, name string) (string, error) {
 	return "", fmt.Errorf("not a git repository: %w", err)
 }
 
-// remoteURLFromConfig читает файл конфигурации git напрямую и возвращает первый
-// URL ремоута name, не открывая репозиторий через go-git (и не валидируя
-// git-расширения).
+// remoteURLFromConfig возвращает первый URL ремоута name, читая конфигурацию
+// через слой хранилища go-git напрямую (filesystem.Storage.Config), минуя
+// git.Open и его проверку расширений. Файловый ввод-вывод выполняет go-git
+// поверх go-billy — собственных обращений к os мы не делаем.
 func remoteURLFromConfig(dir, name string) (string, error) {
-	configPath, err := gitConfigPath(dir)
-	if err != nil {
+	dotGit := osfs.New(filepath.Join(dir, gitDirName))
+	if _, err := dotGit.Stat(""); err != nil {
 		return "", fmt.Errorf("not a git repository: %w", err)
 	}
 
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return "", fmt.Errorf("not a git repository: %w", err)
-	}
+	storer := filesystem.NewStorage(dotGit, cache.NewObjectLRUDefault())
 
-	cfg, err := config.ReadConfig(bytes.NewReader(data))
+	cfg, err := storer.Config()
 	if err != nil {
 		return "", fmt.Errorf("failed to read git config: %w", err)
 	}
@@ -155,75 +148,6 @@ func remoteURLFromConfig(dir, name string) (string, error) {
 	}
 
 	return remote.URLs[0], nil
-}
-
-// gitConfigPath возвращает путь к файлу конфигурации git для репозитория в dir.
-// Поддерживается как обычный репозиторий (.git — каталог), так и worktree или
-// submodule (.git — файл-указатель "gitdir: ..."). Для linked-worktree секция
-// remote хранится в общем каталоге (commondir), поэтому он учитывается.
-func gitConfigPath(dir string) (string, error) {
-	gitPath := filepath.Join(dir, gitDirName)
-
-	info, err := os.Stat(gitPath)
-	if err != nil {
-		return "", err
-	}
-
-	if info.IsDir() {
-		return filepath.Join(gitPath, gitConfigName), nil
-	}
-
-	gitDir, err := resolveGitdirFile(gitPath)
-	if err != nil {
-		return "", err
-	}
-
-	if commonDir, ok := resolveCommonDir(gitDir); ok {
-		return filepath.Join(commonDir, gitConfigName), nil
-	}
-
-	return filepath.Join(gitDir, gitConfigName), nil
-}
-
-// resolveGitdirFile читает файл .git вида "gitdir: <path>" и возвращает
-// абсолютный путь к git-каталогу.
-func resolveGitdirFile(gitFile string) (string, error) {
-	data, err := os.ReadFile(gitFile)
-	if err != nil {
-		return "", err
-	}
-
-	line := strings.TrimSpace(string(data))
-	if !strings.HasPrefix(line, gitdirPrefix) {
-		return "", fmt.Errorf("%w: .git file has no %q prefix", ErrInvalidRepositoryPath, gitdirPrefix)
-	}
-
-	gitDir := strings.TrimSpace(strings.TrimPrefix(line, gitdirPrefix))
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(filepath.Dir(gitFile), gitDir)
-	}
-
-	return filepath.Clean(gitDir), nil
-}
-
-// resolveCommonDir возвращает общий git-каталог для linked-worktree, если в
-// gitDir присутствует файл commondir. Второе значение сообщает, найден ли он.
-func resolveCommonDir(gitDir string) (string, bool) {
-	data, err := os.ReadFile(filepath.Join(gitDir, gitCommonDirName))
-	if err != nil {
-		return "", false
-	}
-
-	commonDir := strings.TrimSpace(string(data))
-	if commonDir == "" {
-		return "", false
-	}
-
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(gitDir, commonDir)
-	}
-
-	return filepath.Clean(commonDir), true
 }
 
 func getRemoteURL(repo *git.Repository, name string) (string, error) {

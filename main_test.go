@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
@@ -682,66 +681,6 @@ func TestResolveRemoteURL(t *testing.T) {
 	})
 }
 
-func TestGitConfigPath(t *testing.T) {
-	t.Run("plain repository points at .git/config", func(t *testing.T) {
-		repoPath := initTempRepo(t)
-
-		got, err := gitConfigPath(repoPath)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(repoPath, ".git", "config"), got)
-	})
-
-	t.Run("worktree .git file without commondir resolves to gitdir config", func(t *testing.T) {
-		root := t.TempDir()
-		work := filepath.Join(root, "work")
-		gitDir := filepath.Join(root, "actual-gitdir")
-		require.NoError(t, os.MkdirAll(work, 0o750))
-		require.NoError(t, os.MkdirAll(gitDir, 0o750))
-		writeFile(t, filepath.Join(work, ".git"), "gitdir: "+gitDir+"\n")
-
-		got, err := gitConfigPath(work)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(gitDir, "config"), got)
-	})
-
-	t.Run("linked worktree resolves config from commondir", func(t *testing.T) {
-		root := t.TempDir()
-		work := filepath.Join(root, "wt")
-		commonDir := filepath.Join(root, "main", ".git")
-		worktreeDir := filepath.Join(commonDir, "worktrees", "wt")
-		require.NoError(t, os.MkdirAll(work, 0o750))
-		require.NoError(t, os.MkdirAll(worktreeDir, 0o750))
-		require.NoError(t, os.MkdirAll(commonDir, 0o750))
-		writeFile(t, filepath.Join(work, ".git"), "gitdir: "+worktreeDir+"\n")
-		// git хранит в commondir относительный путь к общему каталогу.
-		writeFile(t, filepath.Join(worktreeDir, "commondir"), "../..\n")
-
-		got, err := gitConfigPath(work)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(commonDir, "config"), got)
-	})
-
-	t.Run("malformed .git file is rejected", func(t *testing.T) {
-		work := t.TempDir()
-		writeFile(t, filepath.Join(work, ".git"), "not a gitdir pointer\n")
-
-		_, err := gitConfigPath(work)
-		require.ErrorIs(t, err, ErrInvalidRepositoryPath)
-	})
-
-	t.Run("missing .git is reported", func(t *testing.T) {
-		_, err := gitConfigPath(t.TempDir())
-		require.Error(t, err)
-	})
-}
-
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-
-	//nolint:gosec // G703: путь построен из t.TempDir(), доверенный тестовый каталог.
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-}
-
 func setOriginRemote(t *testing.T, repoPath, remoteURL string) {
 	t.Helper()
 
@@ -755,18 +694,20 @@ func setOriginRemote(t *testing.T, repoPath, remoteURL string) {
 	require.NoError(t, err)
 }
 
-// enableWorktreeConfig дописывает в .git/config расширение
-// extensions.worktreeConfig — то же, что выставляют VS Code и git worktree и
-// что заставляет go-git отказаться открывать репозиторий.
+// enableWorktreeConfig включает расширение extensions.worktreeConfig — то же,
+// что выставляют VS Code и git worktree и что заставляет go-git отказаться
+// открывать репозиторий через git.PlainOpen.
 func enableWorktreeConfig(t *testing.T, repoPath string) {
 	t.Helper()
 
-	configPath := filepath.Join(repoPath, ".git", "config")
-
-	data, err := os.ReadFile(configPath)
+	repo, err := git.PlainOpen(repoPath)
 	require.NoError(t, err)
 
-	writeFile(t, configPath, string(data)+"[extensions]\n\tworktreeConfig = true\n")
+	cfg, err := repo.Config()
+	require.NoError(t, err)
+
+	cfg.Raw.Section("extensions").SetOption("worktreeConfig", "true")
+	require.NoError(t, repo.Storer.SetConfig(cfg))
 }
 
 func initTempRepo(t *testing.T) string {
