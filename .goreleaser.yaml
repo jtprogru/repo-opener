@@ -44,8 +44,11 @@ builds:
 
 archives:
   - formats: ["tar.gz"]
+    # .Arm64 уже содержит ведущую "v" (например "v8.0"), поэтому литеральная "v"
+    # перед ним не нужна — иначе получается "arm64vv8.0". Так как собирается
+    # только дефолтный вариант arm64, микроархитектурный суффикс опускаем целиком.
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}{{- if .Arm64 }}v{{ .Arm64 }}{{ end }}{{ if .Prerelease }}_{{ .Prerelease }}{{ end }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}{{ if .Prerelease }}_{{ .Prerelease }}{{ end }}
     allow_different_binary_count: false
     # use zip for windows archives
     format_overrides:
