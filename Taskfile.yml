@@ -2,7 +2,7 @@
 ---
 version: "3"
 
-environment:
+env:
   GOPROXY: https://proxy.golang.org,direct
 
 vars:
