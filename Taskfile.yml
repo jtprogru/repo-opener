@@ -9,11 +9,13 @@ vars:
   HOME:
     sh: echo $HOME
   BINARY_NAME: repo-opener
-  VERSION: dev
-  COMMIT: dev
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
   DATE:
     sh: date -u '+%Y-%m-%dT%H:%M:%SZ'
-  GOLDFLAGS: "-X main.Version={{.VERSION}} -X main.Commit={{.COMMIT}} -X main.Date={{.DATE}} -X main.BuiltBy=taskfile"
+  GOLDFLAGS: "-s -w -X main.Version={{.VERSION}} -X main.Commit={{.COMMIT}} -X main.Date={{.DATE}} -X main.BuiltBy=taskfile"
 
 tasks:
   default:
@@ -22,9 +24,9 @@ tasks:
     silent: true
 
   run:cmd:
-    desc: Run as go run main.go
+    desc: Run via go run
     cmds:
-      - "go run main.go {{ .CLI_ARGS }}"
+      - "go run . {{ .CLI_ARGS }}"
 
   run:bin:
     desc: Run as binary
@@ -34,22 +36,27 @@ tasks:
       - "{{ .HOME }}/go/bin/{{ .BINARY_NAME }} {{ .CLI_ARGS }}"
 
   tidy:
-    desc: Install all requirements
+    desc: Tidy go modules
     preconditions:
       - test -f go.mod
     cmds:
-      - "GOPROXY=https://proxy.golang.org,direct go mod tidy"
+      - "go mod tidy"
 
   build:bin:
-    desc: Build bin file from go
+    desc: Build binary into $HOME/go/bin
     preconditions:
-      - test -f main.go
+      - test -f go.mod
     cmds:
       - "go mod download"
-      - "CGO_ENABLED=0 go build -ldflags '{{ .GOLDFLAGS }}' -o {{ .HOME }}/go/bin/{{ .BINARY_NAME }} main.go"
+      - "CGO_ENABLED=0 go build -ldflags '{{ .GOLDFLAGS }}' -o {{ .HOME }}/go/bin/{{ .BINARY_NAME }} ."
+
+  install:
+    desc: Build and install locally with version info
+    cmds:
+      - "CGO_ENABLED=0 go install -ldflags '{{ .GOLDFLAGS }}' ."
 
   fmt:
-    desc: Run go fmt
+    desc: Run formatters
     cmds:
       - "gofmt -s -w ."
       - "goimports -format-only -d -l -v -w ."
@@ -60,24 +67,24 @@ tasks:
       - "go vet ./..."
 
   test:
-    desc: Run all test
+    desc: Run all tests with coverage and race detector
     cmds:
       - "go test -coverprofile=cover.out -v ./..."
-      - task test:race
-      - task test:coverage
+      - task: test:race
+      - task: test:coverage
 
   test:short:
-    desc: Run short test
+    desc: Run short tests
     cmds:
       - "go test --short -coverprofile=cover.out -v ./..."
 
   test:coverage:
-    desc: Run test coverage
+    desc: Show test coverage report
     cmds:
       - "go tool cover -func=cover.out"
 
   test:race:
-    desc: Run tests with race
+    desc: Run tests with the race detector
     cmds:
       - "go test -race -v ./..."
 
@@ -87,10 +94,10 @@ tasks:
       - "watchexec -c clear -o do-nothing -d 100ms --exts go 'pkg=\".${WATCHEXEC_COMMON_PATH/$PWD/}/...\"; echo \"running tests for $pkg\"; go test \"$pkg\"'"
 
   lint:
-    desc: Run all lint
+    desc: Run all linters
     cmds:
-      - task lint:golangci
-      - task lint:bearer
+      - task: lint:golangci
+      - task: lint:bearer
 
   lint:golangci:
     desc: Run golangci-lint
@@ -98,11 +105,27 @@ tasks:
       - "golangci-lint -v run --output.text.colors"
 
   lint:bearer:
-    desc: Run Bearer Security
+    desc: Run Bearer security scan
     cmds:
-      - "bearer scan ."
+      - "bearer scan . --config-file bearer.yml"
 
-  install:
-    desc: Build and install localy
+  release:check:
+    desc: Validate the GoReleaser configuration
+    preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser is not installed: https://goreleaser.com/install/"
     cmds:
-      - "go install"
+      - "goreleaser check"
+
+  release:snapshot:
+    desc: Build a local snapshot release (no publish)
+    preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser is not installed: https://goreleaser.com/install/"
+    cmds:
+      - "goreleaser release --snapshot --clean --skip=publish"
+
+  clean:
+    desc: Remove build and test artifacts
+    cmds:
+      - "rm -rf dist cover.out"
