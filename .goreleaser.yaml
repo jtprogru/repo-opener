@@ -74,6 +74,8 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
+    homepage: "https://github.com/jtprogru/repo-opener"
+    description: "Print or open the current Git repository's remote URL in a browser"
     # The binary is not signed/notarized with an Apple Developer ID, so macOS
     # Gatekeeper quarantines it ("Apple could not verify ... is free of
     # malware"). Strip the quarantine attribute on install so the cask works
