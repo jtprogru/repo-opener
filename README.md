@@ -8,6 +8,8 @@
 
 Simple utility that prints the current Git repository's remote HTTP URL — works for public hosts (GitHub/GitLab/Bitbucket) and self-hosted installations alike. Optionally opens the URL in your default browser.
 
+It is also branch-aware out of the box: on the default branch (`main`/`master`, or whatever the remote's `HEAD` points to) it prints the repository root URL, while on any other branch it prints the URL of that branch (e.g. `https://github.com/jtprogru/py-tg-moder/tree/feat/uv-and-ptb-async-migration`). Use `--no-branch` to always get the root URL.
+
 ## Installation
 
 ### Homebrew (macOS / Linux)
@@ -51,6 +53,7 @@ After which you will have the command `rop` for running `repo-opener`.
 - `-version`: Print version and build information and exit.
 - `-o`, `--open`: Print the URL and also open it in the default browser.
 - `-remote <name>`: Specify remote name to use (default: `origin`).
+- `--no-branch`: Always print the repository root URL, ignoring the current branch.
 
 ### Examples
 
@@ -65,6 +68,14 @@ repo-opener --open
 
 # Use a different remote (e.g., upstream)
 repo-opener -remote upstream
+
+# On a feature branch, the branch URL is printed automatically
+repo-opener
+# Output: https://github.com/user/repo/tree/feat/my-feature
+
+# Force the repository root URL even on a feature branch
+repo-opener --no-branch
+# Output: https://github.com/user/repo
 
 # Combine flags
 repo-opener --open -remote upstream
@@ -91,6 +102,19 @@ repo-opener --open -remote upstream
 | Custom | `git.jtprog.ru` |
 
 > **Note:** Private installations are **not normalized** — the host is preserved as-is.
+
+### Branch URL formats
+
+When on a non-default branch, the branch path is appended using the convention of the detected platform:
+
+| Platform | Branch URL format |
+|----------|-------------------|
+| GitHub / GitHub Enterprise | `…/tree/<branch>` |
+| GitLab (cloud & self-hosted) | `…/-/tree/<branch>` |
+| Bitbucket | `…/src/<branch>` |
+| Gitea / Forgejo / Codeberg | `…/src/branch/<branch>` |
+
+The platform is detected from the host name (exact match for public hosts, substring heuristic for self-hosted ones). For unrecognized self-hosted hosts the GitHub-style `…/tree/<branch>` format is used as a fallback, so a host running a different forge may produce an incorrect branch path — use `--no-branch` in that case.
 
 ## Troubleshooting
 
