@@ -9,6 +9,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -630,6 +631,53 @@ func TestRun(t *testing.T) {
 		var buf bytes.Buffer
 		require.Error(t, run([]string{"--nonexistent"}, &buf, noopOpen))
 	})
+
+	t.Run("custom branch appends github tree path", func(t *testing.T) {
+		createOriginRepo(t, "git@github.com:jtprogru/py-tg-moder.git")
+		setHeadBranch(t, ".", "feat/uv-and-ptb-async-migration")
+
+		var buf bytes.Buffer
+		require.NoError(t, run(nil, &buf, noopOpen))
+		assert.Equal(t,
+			"https://github.com/jtprogru/py-tg-moder/tree/feat/uv-and-ptb-async-migration\n",
+			buf.String())
+	})
+
+	t.Run("custom branch appends gitlab tree path", func(t *testing.T) {
+		createOriginRepo(t, "git@gitlab.com:org/repo.git")
+		setHeadBranch(t, ".", "feature/x")
+
+		var buf bytes.Buffer
+		require.NoError(t, run(nil, &buf, noopOpen))
+		assert.Equal(t, "https://gitlab.com/org/repo/-/tree/feature/x\n", buf.String())
+	})
+
+	t.Run("custom branch appends bitbucket src path", func(t *testing.T) {
+		createOriginRepo(t, "git@bitbucket.org:org/repo.git")
+		setHeadBranch(t, ".", "develop")
+
+		var buf bytes.Buffer
+		require.NoError(t, run(nil, &buf, noopOpen))
+		assert.Equal(t, "https://bitbucket.org/org/repo/src/develop\n", buf.String())
+	})
+
+	t.Run("no-branch flag prints root url on custom branch", func(t *testing.T) {
+		createOriginRepo(t, "git@github.com:org/repo.git")
+		setHeadBranch(t, ".", "feature/x")
+
+		var buf bytes.Buffer
+		require.NoError(t, run([]string{"--no-branch"}, &buf, noopOpen))
+		assert.Equal(t, "https://github.com/org/repo\n", buf.String())
+	})
+
+	t.Run("default branch prints root url", func(t *testing.T) {
+		createOriginRepo(t, "git@github.com:org/repo.git")
+		setHeadBranch(t, ".", "main")
+
+		var buf bytes.Buffer
+		require.NoError(t, run(nil, &buf, noopOpen))
+		assert.Equal(t, "https://github.com/org/repo\n", buf.String())
+	})
 }
 
 func TestResolveRemoteURL(t *testing.T) {
@@ -679,6 +727,224 @@ func TestResolveRemoteURL(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "not a git repository")
 	})
+}
+
+func TestBranchPathSegment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{"github public", "github.com", "/tree/"},
+		{"github enterprise", "github.acme.com", "/tree/"},
+		{"gitlab public", "gitlab.com", "/-/tree/"},
+		{"gitlab self-hosted", "gitlab.company.com", "/-/tree/"},
+		{"bitbucket public", "bitbucket.org", "/src/"},
+		{"bitbucket self-hosted", "bitbucket.internal", "/src/"},
+		{"gitea self-hosted", "gitea.example.com", "/src/branch/"},
+		{"forgejo self-hosted", "forgejo.example.com", "/src/branch/"},
+		{"codeberg", "codeberg.org", "/src/branch/"},
+		{"unknown host falls back to github style", "git.internal", "/tree/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, branchPathSegment(tt.host))
+		})
+	}
+}
+
+func TestEncodeBranch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		branch string
+		want   string
+	}{
+		{"simple", "develop", "develop"},
+		{"slash preserved", "feat/uv-and-ptb-async-migration", "feat/uv-and-ptb-async-migration"},
+		{"multiple slashes", "release/1.0/hotfix", "release/1.0/hotfix"},
+		{"special chars escaped", "feat/a b#c", "feat/a%20b%23c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, encodeBranch(tt.branch))
+		})
+	}
+}
+
+func TestAppendBranchPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		webURL string
+		branch string
+		want   string
+	}{
+		{
+			"github tree",
+			"https://github.com/jtprogru/py-tg-moder",
+			"feat/uv-and-ptb-async-migration",
+			"https://github.com/jtprogru/py-tg-moder/tree/feat/uv-and-ptb-async-migration",
+		},
+		{
+			"gitlab tree",
+			"https://gitlab.com/org/repo",
+			"feature/x",
+			"https://gitlab.com/org/repo/-/tree/feature/x",
+		},
+		{
+			"bitbucket src",
+			"https://bitbucket.org/org/repo",
+			"develop",
+			"https://bitbucket.org/org/repo/src/develop",
+		},
+		{
+			"gitea src branch",
+			"https://gitea.example.com/org/repo",
+			"feature/y",
+			"https://gitea.example.com/org/repo/src/branch/feature/y",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := appendBranchPath(tt.webURL, tt.branch)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestHeadBranch(t *testing.T) {
+	t.Run("returns checked-out branch", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setHeadBranch(t, repoPath, "feat/uv-and-ptb-async-migration")
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+		assert.Equal(t, "feat/uv-and-ptb-async-migration", headBranch(repo.Storer))
+	})
+
+	t.Run("empty for detached HEAD", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+
+		hash := plumbing.NewHash("0123456789abcdef0123456789abcdef01234567")
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, hash)))
+
+		assert.Empty(t, headBranch(repo.Storer))
+	})
+}
+
+func TestDefaultBranch(t *testing.T) {
+	t.Run("reads origin HEAD", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setRemoteHead(t, repoPath, "origin", "develop")
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+		assert.Equal(t, "develop", defaultBranch(repo.Storer, "origin"))
+	})
+
+	t.Run("empty when origin HEAD missing", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+		assert.Empty(t, defaultBranch(repo.Storer, "origin"))
+	})
+}
+
+func TestCustomBranch(t *testing.T) {
+	t.Run("default branch via main/master heuristic", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setHeadBranch(t, repoPath, "main")
+
+		branch, ok := customBranch(repoPath, "origin")
+		assert.False(t, ok)
+		assert.Equal(t, "main", branch)
+	})
+
+	t.Run("custom feature branch", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setHeadBranch(t, repoPath, "feat/uv-and-ptb-async-migration")
+
+		branch, ok := customBranch(repoPath, "origin")
+		assert.True(t, ok)
+		assert.Equal(t, "feat/uv-and-ptb-async-migration", branch)
+	})
+
+	t.Run("origin HEAD overrides main/master heuristic", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setHeadBranch(t, repoPath, "main")
+		setRemoteHead(t, repoPath, "origin", "develop")
+
+		// origin/HEAD = develop, поэтому main здесь — кастомная ветка.
+		branch, ok := customBranch(repoPath, "origin")
+		assert.True(t, ok)
+		assert.Equal(t, "main", branch)
+	})
+
+	t.Run("branch matching origin HEAD is default", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+		setHeadBranch(t, repoPath, "develop")
+		setRemoteHead(t, repoPath, "origin", "develop")
+
+		_, ok := customBranch(repoPath, "origin")
+		assert.False(t, ok)
+	})
+
+	t.Run("detached HEAD is not custom", func(t *testing.T) {
+		repoPath := initTempRepo(t)
+
+		repo, err := git.PlainOpen(repoPath)
+		require.NoError(t, err)
+
+		hash := plumbing.NewHash("0123456789abcdef0123456789abcdef01234567")
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, hash)))
+
+		_, ok := customBranch(repoPath, "origin")
+		assert.False(t, ok)
+	})
+
+	t.Run("non-repository is not custom", func(t *testing.T) {
+		_, ok := customBranch(t.TempDir(), "origin")
+		assert.False(t, ok)
+	})
+}
+
+func setHeadBranch(t *testing.T, repoPath, name string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	ref := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName(name))
+	require.NoError(t, repo.Storer.SetReference(ref))
+}
+
+func setRemoteHead(t *testing.T, repoPath, remote, name string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	ref := plumbing.NewSymbolicReference(
+		plumbing.NewRemoteHEADReferenceName(remote),
+		plumbing.NewRemoteReferenceName(remote, name),
+	)
+	require.NoError(t, repo.Storer.SetReference(ref))
 }
 
 func setOriginRemote(t *testing.T, repoPath, remoteURL string) {

@@ -12,7 +12,10 @@ import (
 
 	"github.com/go-git/go-billy/v5/osfs"
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/pkg/browser"
 )
@@ -29,6 +32,12 @@ const (
 
 	// gitDirName — имя служебного каталога git внутри репозитория.
 	gitDirName = ".git"
+
+	// Сегменты пути к ветке в веб-интерфейсе разных Git-платформ.
+	branchPathGitHub    = "/tree/"       // GitHub, GitHub Enterprise.
+	branchPathGitLab    = "/-/tree/"     // GitLab (gitlab.com и self-hosted).
+	branchPathBitbucket = "/src/"        // Bitbucket Cloud.
+	branchPathGitea     = "/src/branch/" // Gitea, Forgejo, Codeberg.
 )
 
 // Sentinel-ошибки для программной проверки через errors.Is.
@@ -59,9 +68,10 @@ func main() {
 // out принимает обычный вывод, openURL — функцию открытия в браузере.
 func run(args []string, out io.Writer, openURL func(string) error) error {
 	var (
-		versionFlag bool
-		openFlag    bool
-		remoteName  string
+		versionFlag  bool
+		openFlag     bool
+		noBranchFlag bool
+		remoteName   string
 	)
 
 	fs := flag.NewFlagSet("repo-opener", flag.ContinueOnError)
@@ -69,6 +79,7 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 	fs.BoolVar(&versionFlag, "version", false, "Print version information and exit")
 	fs.BoolVar(&openFlag, "open", false, "Open the remote URL in the default browser")
 	fs.BoolVar(&openFlag, "o", false, "Open the remote URL in the default browser (shorthand)")
+	fs.BoolVar(&noBranchFlag, "no-branch", false, "Always print the repository root URL, ignoring the current branch")
 	fs.StringVar(&remoteName, "remote", "origin", "Remote name to use (default: origin)")
 
 	if err := fs.Parse(args); err != nil {
@@ -90,6 +101,18 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 	webURL, err := parseRemoteURL(remoteURL)
 	if err != nil {
 		return err
+	}
+
+	// На кастомной (не дефолтной) ветке добавляем к URL ссылку на эту ветку.
+	// Детект веток best-effort и тихо деградирует к корневому URL при ошибках,
+	// поэтому он не влияет на основную функциональность.
+	if !noBranchFlag {
+		if branch, ok := customBranch(".", remoteName); ok {
+			webURL, err = appendBranchPath(webURL, branch)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	fmt.Fprintln(out, webURL)
@@ -135,9 +158,9 @@ func remoteURLFromConfig(dir, name string) (string, error) {
 		return "", fmt.Errorf("not a git repository: %w", err)
 	}
 
-	storer := filesystem.NewStorage(dotGit, cache.NewObjectLRUDefault())
+	store := filesystem.NewStorage(dotGit, cache.NewObjectLRUDefault())
 
-	cfg, err := storer.Config()
+	cfg, err := store.Config()
 	if err != nil {
 		return "", fmt.Errorf("failed to read git config: %w", err)
 	}
@@ -284,6 +307,131 @@ func buildWebURL(hostOrigin, path string) (string, error) {
 	}
 
 	return webURL, nil
+}
+
+// openStorer открывает слой хранилища go-git для репозитория в dir, повторяя
+// двухпутёвую логику resolveRemoteURL: обычный git.PlainOpen, а при включённых
+// несовместимых расширениях (extensions.worktreeConfig и т.п.) — прямое чтение
+// .git через filesystem.Storage. Возвращённый storage.Storer реализует
+// storer.ReferenceStorer, поэтому чтение ссылок одинаково для обоих путей.
+func openStorer(dir string) (storage.Storer, error) {
+	repo, err := git.PlainOpen(dir)
+	if err == nil {
+		return repo.Storer, nil
+	}
+
+	if errors.Is(err, git.ErrUnsupportedExtensionRepositoryFormatVersion) ||
+		errors.Is(err, git.ErrUnknownExtension) {
+		dotGit := osfs.New(filepath.Join(dir, gitDirName))
+		if _, statErr := dotGit.Stat(""); statErr != nil {
+			return nil, fmt.Errorf("not a git repository: %w", statErr)
+		}
+
+		return filesystem.NewStorage(dotGit, cache.NewObjectLRUDefault()), nil
+	}
+
+	return nil, fmt.Errorf("not a git repository: %w", err)
+}
+
+// customBranch сообщает имя текущей ветки и true, если она не является дефолтной
+// (то есть для неё нужно собрать URL со ссылкой на ветку). Детект best-effort:
+// при любой ошибке, detached HEAD или дефолтной ветке возвращается ("", false),
+// и вызывающая сторона печатает корневой URL.
+func customBranch(dir, remote string) (string, bool) {
+	store, err := openStorer(dir)
+	if err != nil {
+		return "", false
+	}
+
+	cur := headBranch(store)
+	if cur == "" {
+		return "", false
+	}
+
+	def := defaultBranch(store, remote)
+	if def != "" {
+		return cur, cur != def
+	}
+
+	// origin/HEAD недоступен (частый случай локальных клонов) — считаем
+	// дефолтными общепринятые main/master.
+	switch cur {
+	case "main", "master":
+		return cur, false
+	default:
+		return cur, true
+	}
+}
+
+// headBranch возвращает короткое имя текущей ветки, читая символьную ссылку HEAD
+// напрямую (без резолва в коммит — работает и в репозитории без коммитов).
+// Для detached HEAD возвращается пустая строка.
+func headBranch(refs storer.ReferenceStorer) string {
+	head, err := refs.Reference(plumbing.HEAD)
+	if err != nil || head.Type() != plumbing.SymbolicReference {
+		return ""
+	}
+
+	target := head.Target()
+	if !target.IsBranch() {
+		return ""
+	}
+
+	return target.Short()
+}
+
+// defaultBranch возвращает имя дефолтной ветки удалёнки remote по символьной
+// ссылке refs/remotes/<remote>/HEAD. Если ссылка отсутствует или не символьная,
+// возвращается пустая строка.
+func defaultBranch(refs storer.ReferenceStorer, remote string) string {
+	ref, err := refs.Reference(plumbing.NewRemoteHEADReferenceName(remote))
+	if err != nil || ref.Type() != plumbing.SymbolicReference {
+		return ""
+	}
+
+	// Target вида refs/remotes/origin/main → Short() = "origin/main".
+	return strings.TrimPrefix(ref.Target().Short(), remote+"/")
+}
+
+// appendBranchPath добавляет к корневому web-URL ссылку на ветку с учётом
+// платформенного формата пути (см. branchPathSegment).
+func appendBranchPath(webURL, branch string) (string, error) {
+	u, err := url.Parse(webURL)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrInvalidResultURL, err)
+	}
+
+	return webURL + branchPathSegment(u.Hostname()) + encodeBranch(branch), nil
+}
+
+// branchPathSegment подбирает сегмент пути к ветке по имени хоста. Публичные
+// платформы определяются точно, self-hosted инсталляции — эвристически по
+// подстроке в hostname. Для неизвестных хостов используется GitHub-стиль /tree/
+// как наиболее распространённый (его понимает в том числе GitHub Enterprise).
+func branchPathSegment(rawHost string) string {
+	host := strings.ToLower(rawHost)
+
+	switch {
+	case host == "gitlab.com" || strings.Contains(host, "gitlab"):
+		return branchPathGitLab
+	case host == "bitbucket.org" || strings.Contains(host, "bitbucket"):
+		return branchPathBitbucket
+	case host == "codeberg.org" || strings.Contains(host, "gitea") || strings.Contains(host, "forgejo"):
+		return branchPathGitea
+	default:
+		return branchPathGitHub
+	}
+}
+
+// encodeBranch экранирует имя ветки для подстановки в путь URL, сохраняя слэши
+// как разделители сегментов (feat/x → feat/x), но экранируя прочие спецсимволы.
+func encodeBranch(branch string) string {
+	segments := strings.Split(branch, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+
+	return strings.Join(segments, "/")
 }
 
 func exitWithError(err error) {
