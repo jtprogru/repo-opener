@@ -1,0 +1,25 @@
+# Trivy configuration for local `trivy fs` scans.
+# Docs: https://trivy.dev/latest/docs/references/configuration/config-file/
+---
+scan:
+  scanners:
+    - vuln       # known CVEs in go.mod / go.sum
+    - secret     # hard-coded credentials, tokens, keys
+    - misconfig  # IaC / CI misconfigurations (e.g. GitHub Actions)
+  # Пути, которые точно не относятся к исходному коду и только шумят в отчёте.
+  skip-dirs:
+    - .git         # история и служебные файлы git
+    - dist         # артефакты сборки GoReleaser (бинарники)
+    - .gocache     # локальный кэш сборки Go
+    - .serena      # кэш и память инструмента Serena, не часть кодовой базы
+  # Отдельные файлы-артефакты, которые не нужно сканировать.
+  skip-files:
+    - cover.out    # отчёт покрытия тестами
+
+severity:
+  - MEDIUM
+  - HIGH
+  - CRITICAL
+
+# Не валить сканирование, если БД уязвимостей ещё не скачана в оффлайне.
+exit-code: 1
