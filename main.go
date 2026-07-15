@@ -60,7 +60,8 @@ var (
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, browser.OpenURL); err != nil {
-		exitWithError(err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -432,9 +433,4 @@ func encodeBranch(branch string) string {
 	}
 
 	return strings.Join(segments, "/")
-}
-
-func exitWithError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(1) //nolint:revive // Exit with error
 }
