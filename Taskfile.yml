@@ -98,6 +98,7 @@ tasks:
     cmds:
       - task: lint:golangci
       - task: lint:bearer
+      - task: lint:trivy
 
   lint:golangci:
     desc: Run golangci-lint
@@ -108,6 +109,14 @@ tasks:
     desc: Run Bearer security scan
     cmds:
       - "bearer scan . --config-file bearer.yml"
+
+  lint:trivy:
+    desc: Run Trivy filesystem scan (vuln, secret, misconfig)
+    preconditions:
+      - sh: command -v trivy
+        msg: "trivy is not installed: https://trivy.dev/latest/getting-started/installation/"
+    cmds:
+      - "trivy fs --config trivy.yaml ."
 
   release:check:
     desc: Validate the GoReleaser configuration
