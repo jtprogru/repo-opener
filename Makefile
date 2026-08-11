@@ -109,7 +109,10 @@ lint-govulncheck: ## Проверить зависимости на извест
 .PHONY: lint-zizmor
 lint-zizmor: ## Прогнать аудит безопасности GitHub Actions
 	$(call need,zizmor,https://docs.zizmor.sh/installation/)
-	zizmor .github/workflows/
+	# Аргумент "." — не только workflow'ы: в набор по умолчанию входят ещё
+	# dependabot.yaml и composite actions. Должно совпадать с тем, что
+	# передаёт zizmor-action в CI, иначе локальный прогон врёт.
+	zizmor .
 
 ## --- Релиз -------------------------------------------------------------
 
