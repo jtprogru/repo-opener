@@ -77,7 +77,12 @@ make lint-trivy
 
 # govulncheck: достижимые уязвимости в зависимостях
 make lint-govulncheck
+
+# zizmor: аудит безопасности GitHub Actions
+make lint-zizmor
 ```
+
+Все actions в workflow'ах пришпилены к полному SHA с комментарием версии рядом. Обновляет их Dependabot, руками теги не возвращать — за этим следит `lint-zizmor`.
 
 ### Форматирование
 

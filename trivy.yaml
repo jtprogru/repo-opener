@@ -5,7 +5,12 @@ scan:
   scanners:
     - vuln       # known CVEs in go.mod / go.sum
     - secret     # hard-coded credentials, tokens, keys
-    - misconfig  # IaC / CI misconfigurations (e.g. GitHub Actions)
+    # misconfig оставлен как ловушка на будущее: в репозитории сейчас нет ни
+    # Dockerfile, ни Terraform, ни Helm/K8s-манифестов, поэтому сканер честно
+    # пишет "Detected config files num=0". Он сработает, если такие файлы
+    # появятся. GitHub Actions сюда НЕ входит — среди misconfig-сканеров Trivy
+    # его просто нет, workflow-файлы аудирует zizmor (см. make lint-zizmor).
+    - misconfig
   # Пути, которые точно не относятся к исходному коду и только шумят в отчёте.
   skip-dirs:
     - .git         # история и служебные файлы git
