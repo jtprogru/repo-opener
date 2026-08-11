@@ -18,7 +18,7 @@ repo-opener/
 ├── main.go           # Основная логика приложения
 ├── main_test.go      # Юнит-тесты
 ├── go.mod            # Зависимости
-├── Taskfile.yml      # Задачи сборки и тестирования
+├── Makefile          # Задачи сборки и тестирования
 ├── .golangci.yaml    # Конфигурация golangci-lint
 └── .goreleaser.yaml  # Конфигурация релизов
 ```
@@ -28,52 +28,61 @@ repo-opener/
 ### Сборка и запуск
 
 ```bash
-# Сборка бинарного файла
-task build:bin
+# Список всех целей
+make help
 
-# Запуск из исходников
-task run:cmd
+# Сборка бинарного файла
+make build-bin
+
+# Запуск из исходников (аргументы через ARGS)
+make run-cmd ARGS="-version"
 
 # Запуск собранного бинарника
-task run:bin
+make run-bin
 
 # Установка локально
-task install
+make install
 ```
 
 ### Тестирование
 
 ```bash
 # Все тесты с coverage
-task test
+make test
 
 # Короткие тесты
-task test:short
+make test-short
 
 # Тесты с race detector
-task test:race
+make test-race
 
 # Покрытие
-task test:coverage
+make test-coverage
 ```
 
 ### Линтинг
 
 ```bash
-# Все линтеры
-task lint
+# Все линтеры и сканеры безопасности
+make lint
 
 # golangci-lint
-task lint:golangci
+make lint-golangci
 
 # Bearer Security
-task lint:bearer
+make lint-bearer
+
+# Trivy: CVE в зависимостях, секреты, misconfig
+make lint-trivy
+
+# govulncheck: достижимые уязвимости в зависимостях
+make lint-govulncheck
 ```
 
 ### Форматирование
 
 ```bash
-task fmt
+make fmt
 ```
 
 ## Стиль кода
@@ -179,5 +188,5 @@ func initTempRepo(t *testing.T) string {
 
 1. **CGO_ENABLED=0** для статической сборки
 2. **GOPROXY:** `https://proxy.golang.org,direct`
-3. Все команды через **Taskfile.yml**, не используйте `go build` напрямую
-4. Перед коммитом: `task lint && task test`
+3. Все команды через **Makefile**, не используйте `go build` напрямую
+4. Перед коммитом: `make lint && make test`
