@@ -1,10 +1,12 @@
 # repo-opener
 
-[![golangci-lint](https://github.com/jtprogru/repo-opener/actions/workflows/lint.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/lint.yaml)
-[![testing](https://github.com/jtprogru/repo-opener/actions/workflows/tests.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/tests.yaml)
-[![goreleaser](https://github.com/jtprogru/repo-opener/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/goreleaser.yaml)
-[![bearer](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml)
-[![GitHub stars](https://img.shields.io/github/stars/jtprogru/repo-opener?style=plastic&color=5BB359)](https://github.com/jtprogru/repo-opener/stargazers)
+[![golangci-lint](https://github.com/jtprogru/repo-opener/actions/workflows/lint.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/lint.yaml) [![testing](https://github.com/jtprogru/repo-opener/actions/workflows/tests.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/tests.yaml) [![goreleaser](https://github.com/jtprogru/repo-opener/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/goreleaser.yaml) [![bearer](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml/badge.svg)](https://github.com/jtprogru/repo-opener/actions/workflows/bearer.yaml) [![GitHub stars](https://img.shields.io/github/stars/jtprogru/repo-opener?style=plastic&color=5BB359)](https://github.com/jtprogru/repo-opener/stargazers)
+
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="assets/cover.svg" alt="repo-opener — prints the current Git repository URL and opens it in the browser" width="900">
+</p>
+<!-- markdownlint-enable MD033 -->
 
 Simple utility that prints the current Git repository's remote HTTP URL — works for public hosts (GitHub/GitLab/Bitbucket) and self-hosted installations alike. Optionally opens the URL in your default browser.
 
