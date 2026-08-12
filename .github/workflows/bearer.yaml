@@ -44,14 +44,30 @@ jobs:
           format: sarif
           output: bearer.sarif
 
-      # Заливаем результат даже если предыдущий шаг упал на находках: сам job
+      # Bearer при нуле находок пишет "results": null, а SARIF-схема требует
+      # массив — GitHub такой файл отвергает с "instance.runs[0].results is not
+      # of a type(s) array". Приводим к [] перед загрузкой.
+      #
+      # Шаг не должен ронять job, если файла нет вовсе (Bearer не дошёл до
+      # записи отчёта) — тогда просто нечего загружать.
+      - name: Normalise Bearer SARIF
+        if: ${{ always() && github.event_name == 'push' }}
+        run: |
+          if [[ ! -f bearer.sarif ]]; then
+            echo "bearer.sarif not found, nothing to normalise"
+            exit 0
+          fi
+          jq '(.runs[]?.results) //= []' bearer.sarif > bearer.sarif.tmp
+          mv bearer.sarif.tmp bearer.sarif
+
+      # Заливаем результат даже если шаг Bearer упал на находках: сам job
       # всё равно останется красным, но находки будут видны в Security-табе,
       # а не только в логах.
       #
       # Только на push: у PR от Dependabot токен read-only, security-events там
       # не выдаётся и загрузка гарантированно падала бы.
       - name: Upload SARIF to Security tab
-        if: ${{ always() && github.event_name == 'push' }}
+        if: ${{ always() && github.event_name == 'push' && hashFiles('bearer.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           sarif_file: bearer.sarif
