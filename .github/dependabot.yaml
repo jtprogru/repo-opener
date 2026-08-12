@@ -1,4 +1,13 @@
 version: 2
+
+# cooldown: сколько дней новая версия «отлёживается», прежде чем Dependabot
+# предложит на неё обновиться. Это защита от supply-chain: если релиз пакета
+# скомпрометирован, окно обычно закрывают в первые дни, и мы в него не въезжаем.
+#
+# Важно: cooldown действует ТОЛЬКО на version updates. Security updates его
+# игнорируют и приезжают сразу, так что фиксы вроде go-git 5.19.2 не
+# задерживаются ни на день.
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
 updates:
   # Go модули
   - package-ecosystem: "gomod"
@@ -19,6 +28,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    cooldown:
+      default-days: 7
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -34,15 +45,19 @@ updates:
       - "ci"
     commit-message:
       prefix: "chore(ci)"
+    cooldown:
+      default-days: 7
 
-  # Dependabot security updates
-  - package-ecosystem: "gomod"
-    directory: "/"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
-    labels:
-      - "security"
-      - "dependencies"
-    commit-message:
-      prefix: "security(deps)"
+  # Здесь раньше был третий блок с комментарием «Dependabot security updates»:
+  # ещё один gomod на ту же директорию, interval: daily, prefix security(deps).
+  #
+  # Он делал конфиг невалидным целиком — GitHub требует уникальную комбинацию
+  # package-ecosystem + directory + target-branch и отвечал «Ecosystem 'gomod'
+  # has overlapping directories». Из-за этого не применялись и первые два блока:
+  # все PR приезжали с префиксом build(deps), а не с настроенными chore(deps) /
+  # chore(ci).
+  #
+  # Настраивать security updates через этот файл в принципе нельзя — они
+  # включаются в Settings → Code security и приезжают сразу, игнорируя schedule,
+  # open-pull-requests-limit и cooldown отсюда. Именно так и приехали фиксы
+  # go-git. Поэтому блок просто удалён, а не починен.

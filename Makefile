@@ -84,7 +84,7 @@ test-watch: ## Перезапускать тесты при изменении �
 ## --- Линтеры и безопасность --------------------------------------------
 
 .PHONY: lint
-lint: lint-golangci lint-bearer lint-trivy lint-govulncheck ## Прогнать все линтеры и сканеры
+lint: lint-golangci lint-bearer lint-trivy lint-govulncheck lint-zizmor ## Прогнать все линтеры и сканеры
 
 .PHONY: lint-golangci
 lint-golangci: ## Прогнать golangci-lint
@@ -105,6 +105,14 @@ lint-trivy: ## Прогнать Trivy filesystem scan (vuln, secret, misconfig)
 lint-govulncheck: ## Проверить зависимости на известные уязвимости
 	$(call need,govulncheck,https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
 	govulncheck ./...
+
+.PHONY: lint-zizmor
+lint-zizmor: ## Прогнать аудит безопасности GitHub Actions
+	$(call need,zizmor,https://docs.zizmor.sh/installation/)
+	# Аргумент "." — не только workflow'ы: в набор по умолчанию входят ещё
+	# dependabot.yaml и composite actions. Должно совпадать с тем, что
+	# передаёт zizmor-action в CI, иначе локальный прогон врёт.
+	zizmor .
 
 ## --- Релиз -------------------------------------------------------------
 
