@@ -80,9 +80,7 @@ homebrew_casks:
     # Gatekeeper quarantines it ("Apple could not verify ... is free of
     # malware"). Strip the quarantine attribute on install so the cask works
     # out of the box.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/repo-opener"]
-          end
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/repo-opener"]
+      end
