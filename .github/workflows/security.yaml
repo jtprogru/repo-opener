@@ -62,7 +62,7 @@ jobs:
       # незапиненные actions, отравление кэша, лишние permissions.
       # Trivy это не покрывает — в его misconfig-сканерах GitHub Actions нет.
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
         with:
           # Только на push: у PR от Dependabot токен read-only, security-events
           # там не выдаётся и загрузка SARIF гарантированно падала бы.
