@@ -1,6 +1,6 @@
 module github.com/jtprogru/repo-opener
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/go-git/go-billy/v5 v5.9.1
@@ -26,7 +26,7 @@ require (
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

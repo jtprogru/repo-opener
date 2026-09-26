@@ -5,7 +5,7 @@
 **repo-opener** — простая утилита на Go для быстрого открытия текущего Git-репозитория в браузере.
 
 - **Модуль:** `github.com/jtprogru/repo-opener`
-- **Версия Go:** 1.25.0
+- **Версия Go:** минимальная — директива `go` в `go.mod`, toolchain для CI — `.go-version`
 - **Основные зависимости:**
   - `github.com/go-git/go-git/v5` — работа с Git
   - `github.com/pkg/browser` — открытие URL в браузере
@@ -167,6 +167,8 @@ func initTempRepo(t *testing.T) string {
 - **tests.yaml** — тесты
 - **goreleaser.yaml** — релизы
 - **bearer.yaml** — security scan
+
+Версия Go для всех workflow задаётся в одном месте — `.go-version`, setup-go читает её через `go-version-file`. Не переключай его на `go.mod`: оттуда setup-go берёт директиву `go` буквально (например, `1.26.0`), и CI застрянет на нулевом патче без исправлений stdlib. При переходе на новую минорную версию Go меняй `.go-version` и при необходимости `go` в `go.mod`.
 
 ## Версионирование
 
