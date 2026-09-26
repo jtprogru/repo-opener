@@ -5,7 +5,7 @@
 **repo-opener** — простая утилита на Go для быстрого открытия текущего Git-репозитория в браузере.
 
 - **Модуль:** `github.com/jtprogru/repo-opener`
-- **Версия Go:** 1.25.0
+- **Версия Go:** 1.26.0
 - **Основные зависимости:**
   - `github.com/go-git/go-git/v5` — работа с Git
   - `github.com/pkg/browser` — открытие URL в браузере
