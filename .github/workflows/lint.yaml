@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  GOLANGCI_LINT_VERSION: v2.10
+  GOLANGCI_LINT_VERSION: v2.15.0
 
 jobs:
   golangci-lint:
