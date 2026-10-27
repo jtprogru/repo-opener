@@ -60,7 +60,8 @@ var (
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, browser.OpenURL); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// Если не удалось записать даже в stderr, сообщить об этом уже некуда.
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -88,8 +89,11 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 	}
 
 	if versionFlag {
-		fmt.Fprintln(out, "Version:", Version)
-		fmt.Fprintf(out, "Build info: commit %s, built at %s, by %s\n", Commit, Date, BuiltBy)
+		_, err := fmt.Fprintf(out, "Version: %s\nBuild info: commit %s, built at %s, by %s\n",
+			Version, Commit, Date, BuiltBy)
+		if err != nil {
+			return fmt.Errorf("failed to print version: %w", err)
+		}
 
 		return nil
 	}
@@ -116,7 +120,9 @@ func run(args []string, out io.Writer, openURL func(string) error) error {
 		}
 	}
 
-	fmt.Fprintln(out, webURL)
+	if _, err := fmt.Fprintln(out, webURL); err != nil {
+		return fmt.Errorf("failed to print URL: %w", err)
+	}
 
 	if openFlag {
 		if err := openURL(webURL); err != nil {

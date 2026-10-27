@@ -627,6 +627,28 @@ func TestRun(t *testing.T) {
 		assert.ErrorContains(t, err, "failed to open browser")
 	})
 
+	t.Run("version write failure is propagated", func(t *testing.T) {
+		err := run([]string{"--version"}, failingWriter{}, noopOpen)
+		require.ErrorIs(t, err, errWriteFailed)
+		assert.ErrorContains(t, err, "failed to print version")
+	})
+
+	t.Run("url write failure is propagated and browser is not opened", func(t *testing.T) {
+		createOriginRepo(t, "git@github.com:org/repo.git")
+
+		opened := false
+		trackOpen := func(string) error {
+			opened = true
+
+			return nil
+		}
+
+		err := run([]string{"-o"}, failingWriter{}, trackOpen)
+		require.ErrorIs(t, err, errWriteFailed)
+		require.ErrorContains(t, err, "failed to print URL")
+		assert.False(t, opened)
+	})
+
 	t.Run("invalid flag", func(t *testing.T) {
 		var buf bytes.Buffer
 		require.Error(t, run([]string{"--nonexistent"}, &buf, noopOpen))
@@ -974,6 +996,15 @@ func enableWorktreeConfig(t *testing.T, repoPath string) {
 
 	cfg.Raw.Section("extensions").SetOption("worktreeConfig", "true")
 	require.NoError(t, repo.Storer.SetConfig(cfg))
+}
+
+var errWriteFailed = errors.New("write failed")
+
+// failingWriter имитирует закрытый stdout: любая запись завершается ошибкой.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errWriteFailed
 }
 
 func initTempRepo(t *testing.T) string {
