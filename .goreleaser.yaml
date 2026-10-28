@@ -79,8 +79,10 @@ homebrew_casks:
     # The binary is not signed/notarized with an Apple Developer ID, so macOS
     # Gatekeeper quarantines it ("Apple could not verify ... is free of
     # malware"). Strip the quarantine attribute on install so the cask works
-    # out of the box.
-    custom_block: |
-      postflight_steps do
-        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/repo-opener"]
-      end
+    # out of the box. install_steps renders as postflight_steps in the
+    # position brew style expects; custom_block lands at the top of the cask
+    # and trips Cask/StanzaOrder.
+    hooks:
+      post:
+        install_steps: |
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/repo-opener"]
